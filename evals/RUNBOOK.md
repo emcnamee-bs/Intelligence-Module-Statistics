@@ -135,10 +135,31 @@ fires in that situation, and the recommendation to retune it is unactioned.
 Install the skill first, or the test is meaningless:
 
 ```bash
-ln -s "/Users/eamonmcnamee/Downloads/Intelligence-Module:Statistics" ~/.claude/skills/statistical-judgment
+mkdir -p ~/.claude/skills
+ln -sfn "/Users/eamonmcnamee/Downloads/Intelligence-Module:Statistics" \
+        ~/.claude/skills/statistical-judgment
 ```
 
-Then a **fresh session**, Opus or Sonnet. Paste verbatim. **Do not mention statistics.** You are
+`mkdir -p` is required — `~/.claude/skills/` does not exist by default, and `ln` will not create a
+parent directory. Its error names the *link* path, which makes a missing folder look like a naming
+problem. `-f` overwrites an existing link and `-n` prevents nesting inside one, so this is safe to
+re-run.
+
+Verify before proceeding:
+
+```bash
+head -3 ~/.claude/skills/statistical-judgment/SKILL.md
+python3 ~/.claude/skills/statistical-judgment/models/design/minimum_attainable_p_for_design.py --n1 3 --n2 3
+```
+
+**Note on the path.** The directory name contains a **colon**, not a slash:
+`Intelligence-Module:Statistics`. Legacy HFS used `:` as its path separator, so Finder displays the
+two swapped — a folder created as `A/B` in Finder is stored as `A:B` on disk. Quote the path
+everywhere. If the skill fails to appear in a fresh session, suspect the colon first and copy the
+directory to a colon-free location rather than linking.
+
+Then a **fresh session** — skill metadata loads at startup, so an already-open session will not see
+it. Opus or Sonnet. Paste verbatim. **Do not mention statistics.** You are
 testing discovery, not capability — the question is whether the skill fires on its own.
 
 ## B1 — relayed claim in a review
