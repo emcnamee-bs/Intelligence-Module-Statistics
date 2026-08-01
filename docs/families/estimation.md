@@ -5,6 +5,7 @@
 ## Contents
 
 - [Three-point estimate to a range (beta-PERT)](#three-point-estimate-to-range) — mean, correct sd, requested percentiles, and the error in the textbook sd
+- [Quantile upper bound from order statistics](#quantile-confidence-from-order-statistics) — the order statistic bounding the quantile, or the sample size that would be required
 
 ## Three-point estimate to a range (beta-PERT)
 
@@ -32,5 +33,40 @@ python3 models/estimation/three_point_estimate_to_range.py -o OPTIMISTIC -m LIKE
 **Hazard:** Summing per-task PERT estimates understates the total's spread unless the tasks are independent, and understates the duration of parallel workstreams entirely, where the finish time is the maximum rather than the sum.
 
 *Why it exists:* Baseline S5 used the textbook sd (b-a)/6, which is not the standard deviation of the distribution whose mean is (a+4m+b)/6. Corrects a formula reproduced wrongly.
+
+---
+
+## Quantile upper bound from order statistics
+
+<a id="quantile-confidence-from-order-statistics"></a>
+
+**When:** what is our p99 latency from these samples  
+**Tier:** `INLINE`  
+**Earns its place by:** encodes a fact the agent has no way to know it doesn't know
+
+```
+python3 models/estimation/quantile_confidence_from_order_statistics.py --quantile 0.99 (--data v1,v2,... | --n N) [--confidence 0.95]
+```
+
+**Returns:** the order statistic bounding the quantile, or the sample size that would be required
+
+**Also asked as:**
+
+- can I quote a p95 from 100 measurements
+- how many samples do I need before a tail percentile means anything
+- is this p99 number actually supported by the data
+- upper bound on a high percentile
+
+**Refuses (exit 3) when:** quantile or confidence outside (0,1), or unparseable data
+
+**Unanswerable (exit 4) when:** no quantile that high can be bounded at this sample size, whatever the data shows
+
+**Hazard:** A quantile bound from autocorrelated or drifting observations is not valid. Latency samples taken back-to-back under one load pattern are usually not i.i.d.
+
+**Requires of the data:** observations must be i.i.d. draws, not a time-ordered series
+
+**Requires independence:** observations must not share a generator. Repeated runs of one process, or several agents querying one model, are not independent observations.
+
+*Why it exists:* At n=100 nothing above the 0.9705 quantile can be bounded. Structurally the same fact as the p-value floor, which produced the strongest Wave 0 result.
 
 ---

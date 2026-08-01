@@ -12,10 +12,10 @@ Or browse by the question you are asking.
 
 | Family | The question | Models |
 |---|---|---|
-| [design](docs/families/design.md) | Can this design answer my question at all, and how much data do I need? | 2 |
-| [estimation](docs/families/estimation.md) | How big is it, and how sure am I? | 1 |
+| [design](docs/families/design.md) | Can this design answer my question at all, and how much data do I need? | 4 |
+| [estimation](docs/families/estimation.md) | How big is it, and how sure am I? | 2 |
 | [causal](docs/families/causal.md) | Did X actually cause Y? | 1 |
 
-**4 models across 3 families.**
+**7 models across 3 families.**
 
 Every model earns its place by doing something a capable agent working unaided demonstrably could not — see `evals/baselines/RESULTS.md` for the measurements that set that bar. Computation alone does not qualify.

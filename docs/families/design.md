@@ -6,6 +6,8 @@
 
 - [Minimum attainable p-value for this design](#minimum-attainable-p-for-design) — smallest p the design can produce, and whether alpha is reachable at all
 - [Benchmark runs needed per arm](#benchmark-runs-needed) — runs per arm needed; with --pilot, widened for uncertainty in the sd estimate
+- [Multiplicity correction for a search](#multiplicity-correction-for-search) — corrected p, whether it survives, and the raw p that would have been needed
+- [Paired comparison on shared items (exact McNemar)](#mcnemar-paired-comparison) — exact two-sided p from the disagreements, or the best case the totals allow
 
 ## Minimum attainable p-value for this design
 
@@ -68,5 +70,69 @@ python3 models/design/benchmark_runs_needed.py --effect DELTA (--sd SD | --pilot
 **Requires independence:** observations must not share a generator. Repeated runs of one process, or several agents querying one model, are not independent observations.
 
 *Why it exists:* Baseline S1 computed a correct Welch t-test on 5 runs and never asked how many were needed; it scored 3/4 for that omission.
+
+---
+
+## Multiplicity correction for a search
+
+<a id="multiplicity-correction-for-search"></a>
+
+**When:** I checked twelve metrics and one looked different, is it real  
+**Tier:** `INLINE`  
+**Earns its place by:** encodes a fact the agent has no way to know it doesn't know
+
+```
+python3 models/design/multiplicity_correction_for_search.py --p P --comparisons K   |   --p-values p1,p2,... --comparisons K   |   --post-hoc
+```
+
+**Returns:** corrected p, whether it survives, and the raw p that would have been needed
+
+**Also asked as:**
+
+- I noticed this pattern after looking at the data
+- does this p value survive the fact that I tried several things
+- I ran a bunch of comparisons and picked the winner
+- is this significant given how many things I looked at
+
+**Refuses (exit 3) when:** --comparisons is not supplied, since defaulting to 1 would silently reproduce the error the model exists to catch
+
+**Unanswerable (exit 4) when:** the pattern came from open-ended exploration, so the search space cannot be enumerated and no correction is valid
+
+**Hazard:** Correcting only the comparisons you remember running still understates the problem. Abandoned metrics, discarded time windows and subgroups you glanced at all count.
+
+**Requires of the data:** the comparison count must reflect what was actually examined, not what was reported
+
+*Why it exists:* Identified in the sweep as the biggest agent self-deception. The correction is one line; the value is entirely in forcing the count, which no baseline did.
+
+---
+
+## Paired comparison on shared items (exact McNemar)
+
+<a id="mcnemar-paired-comparison"></a>
+
+**When:** model A got 40 out of 50 and model B got 43, is B better  
+**Tier:** `INLINE`  
+**Earns its place by:** encodes a fact the agent has no way to know it doesn't know
+
+```
+python3 models/design/mcnemar_paired_comparison.py --discordant-b B --discordant-c C   |   --a-correct X --b-correct Y --n N
+```
+
+**Returns:** exact two-sided p from the disagreements, or the best case the totals allow
+
+**Also asked as:**
+
+- comparing two systems on the same test set
+- A and B evaluated on the same benchmark items, which wins
+- is this eval difference real when both ran on identical inputs
+- two prompts scored on one shared set of examples
+
+**Refuses (exit 3) when:** totals alone are given and they leave the answer undetermined, or counts are impossible
+
+**Hazard:** A two-proportion test on the same data answers a different question: it treats two measurements of N items as 2N independent observations and discards the pairing that supplies the precision.
+
+**Requires of the data:** the two systems must have been scored on the same items; independent test sets need a two-proportion test instead
+
+*Why it exists:* Totals do not determine a paired comparison, and a three-item net difference cannot reach significance however the pairing falls. Both are facts about the inputs, not computations.
 
 ---

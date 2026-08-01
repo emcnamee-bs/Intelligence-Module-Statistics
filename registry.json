@@ -178,6 +178,124 @@
       "data_provenance_required": "the effect must already be adjusted for measured confounders; an unadjusted estimate makes the E-value meaningless",
       "independence_required": false,
       "evidence": "Reports a breakdown value rather than an assumption test, per principle P4: screening on a low-power assumption check selects for datasets where the violation was invisible."
+    },
+    {
+      "id": "multiplicity-correction-for-search",
+      "path": "models/design/multiplicity_correction_for_search.py",
+      "engine": null,
+      "family": "design",
+      "title": "Multiplicity correction for a search",
+      "situations": [
+        "I checked twelve metrics and one looked different, is it real",
+        "I noticed this pattern after looking at the data",
+        "does this p value survive the fact that I tried several things",
+        "I ran a bunch of comparisons and picked the winner",
+        "is this significant given how many things I looked at"
+      ],
+      "keywords": [
+        "multiple comparisons",
+        "multiplicity",
+        "p-hacking",
+        "forking paths",
+        "post hoc",
+        "bonferroni",
+        "sidak",
+        "holm",
+        "family-wise",
+        "cherry picked",
+        "fishing"
+      ],
+      "tier": "INLINE",
+      "usage": "--p P --comparisons K   |   --p-values p1,p2,... --comparisons K   |   --post-hoc",
+      "output": "corrected p, whether it survives, and the raw p that would have been needed",
+      "selection_limb": "a",
+      "baseline_to_beat": null,
+      "refuses_when": "--comparisons is not supplied, since defaulting to 1 would silently reproduce the error the model exists to catch",
+      "unanswerable_when": "the pattern came from open-ended exploration, so the search space cannot be enumerated and no correction is valid",
+      "composition_hazards": [
+        "Correcting only the comparisons you remember running still understates the problem. Abandoned metrics, discarded time windows and subgroups you glanced at all count."
+      ],
+      "data_provenance_required": "the comparison count must reflect what was actually examined, not what was reported",
+      "independence_required": false,
+      "evidence": "Identified in the sweep as the biggest agent self-deception. The correction is one line; the value is entirely in forcing the count, which no baseline did."
+    },
+    {
+      "id": "quantile-confidence-from-order-statistics",
+      "path": "models/estimation/quantile_confidence_from_order_statistics.py",
+      "engine": null,
+      "family": "estimation",
+      "title": "Quantile upper bound from order statistics",
+      "situations": [
+        "what is our p99 latency from these samples",
+        "can I quote a p95 from 100 measurements",
+        "how many samples do I need before a tail percentile means anything",
+        "is this p99 number actually supported by the data",
+        "upper bound on a high percentile"
+      ],
+      "keywords": [
+        "p99",
+        "p95",
+        "percentile",
+        "quantile",
+        "tail",
+        "latency",
+        "order statistic",
+        "distribution-free",
+        "upper bound",
+        "worst case"
+      ],
+      "tier": "INLINE",
+      "usage": "--quantile 0.99 (--data v1,v2,... | --n N) [--confidence 0.95]",
+      "output": "the order statistic bounding the quantile, or the sample size that would be required",
+      "selection_limb": "a",
+      "baseline_to_beat": null,
+      "refuses_when": "quantile or confidence outside (0,1), or unparseable data",
+      "unanswerable_when": "no quantile that high can be bounded at this sample size, whatever the data shows",
+      "composition_hazards": [
+        "A quantile bound from autocorrelated or drifting observations is not valid. Latency samples taken back-to-back under one load pattern are usually not i.i.d."
+      ],
+      "data_provenance_required": "observations must be i.i.d. draws, not a time-ordered series",
+      "independence_required": true,
+      "evidence": "At n=100 nothing above the 0.9705 quantile can be bounded. Structurally the same fact as the p-value floor, which produced the strongest Wave 0 result."
+    },
+    {
+      "id": "mcnemar-paired-comparison",
+      "path": "models/design/mcnemar_paired_comparison.py",
+      "engine": null,
+      "family": "design",
+      "title": "Paired comparison on shared items (exact McNemar)",
+      "situations": [
+        "model A got 40 out of 50 and model B got 43, is B better",
+        "comparing two systems on the same test set",
+        "A and B evaluated on the same benchmark items, which wins",
+        "is this eval difference real when both ran on identical inputs",
+        "two prompts scored on one shared set of examples"
+      ],
+      "keywords": [
+        "paired",
+        "mcnemar",
+        "same items",
+        "shared test set",
+        "eval",
+        "benchmark",
+        "discordant",
+        "two systems",
+        "head to head",
+        "accuracy comparison"
+      ],
+      "tier": "INLINE",
+      "usage": "--discordant-b B --discordant-c C   |   --a-correct X --b-correct Y --n N",
+      "output": "exact two-sided p from the disagreements, or the best case the totals allow",
+      "selection_limb": "a",
+      "baseline_to_beat": null,
+      "refuses_when": "totals alone are given and they leave the answer undetermined, or counts are impossible",
+      "unanswerable_when": null,
+      "composition_hazards": [
+        "A two-proportion test on the same data answers a different question: it treats two measurements of N items as 2N independent observations and discards the pairing that supplies the precision."
+      ],
+      "data_provenance_required": "the two systems must have been scored on the same items; independent test sets need a two-proportion test instead",
+      "independence_required": false,
+      "evidence": "Totals do not determine a paired comparison, and a three-item net difference cannot reach significance however the pairing falls. Both are facts about the inputs, not computations."
     }
   ]
 }

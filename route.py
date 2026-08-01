@@ -46,7 +46,13 @@ _BM25_B = 0.75
 # best score any should-match-nothing query achieves and the worst score any should-match query
 # achieves, over tests/routing/queries.json. tests/routing/test_route.py recomputes this and fails
 # if the constant drifts from the calibration.
-NO_MATCH_FLOOR = 2.80
+#
+# The margin is shrinking as the registry grows - +1.23 at 4 models, +0.63 at 7 - because shared
+# vocabulary raises the score of near-miss queries. A test guards the margin at 0.2. If it keeps
+# closing at this rate, BM25 over a flat registry will stop separating the populations somewhere
+# around 15-20 models, and routing will need per-family scoring or a two-stage match rather than a
+# lower floor.
+NO_MATCH_FLOOR = 3.36
 
 MAX_MATCHES = 3
 
