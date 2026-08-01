@@ -1,0 +1,61 @@
+name: tests
+
+# The point of this workflow is to prove portability, so it deliberately installs nothing.
+# The module's whole argument is that it runs on a bare python3 with no network and no package
+# installation - the environment where every scipy-based statistics tool fails. A CI job that
+# pip-installed anything would stop testing the property that matters.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.9 is the floor the code targets; 3.13 catches deprecations early. Both run the same
+        # suite, because a model that works on one and not the other is not portable.
+        python-version: ["3.9", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Confirm no third-party packages are present
+        run: |
+          python3 -c "
+          import importlib.util, sys
+          for mod in ('numpy', 'scipy', 'pandas', 'statsmodels'):
+              if importlib.util.find_spec(mod):
+                  sys.exit(f'{mod} is installed; this CI must test the bare-interpreter case')
+          print('bare interpreter confirmed')
+          "
+
+      - name: Run the full suite
+        run: python3 -m unittest discover -s tests -t . -v
+
+      - name: Generated docs must match the registry
+        run: python3 generate_docs.py --check
+
+      - name: Router must answer without a registry write
+        run: |
+          python3 route.py "how many runs do I need" > /dev/null
+          python3 route.py "how do I rebase this branch" | grep -q "NO CONFIDENT MATCH"
+
+      - name: Every registered model must respond to --help
+        run: |
+          python3 - <<'PY'
+          import json, subprocess, sys
+          reg = json.load(open("registry.json"))
+          bad = []
+          for m in reg["models"]:
+              r = subprocess.run([sys.executable, m["path"], "--help"], capture_output=True)
+              if r.returncode != 0:
+                  bad.append(m["id"])
+          sys.exit("models failing --help: " + ", ".join(bad) if bad else 0)
+          PY
