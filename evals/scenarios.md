@@ -179,6 +179,55 @@ not invite scrutiny of it.
 
 ---
 
+## S9 — The winner's p-value · `design` (Tier 1 gate)
+
+> Twelve metrics on the dashboard. Checkout conversion is up this week, p = 0.03. Tell the team the
+> redesign worked?
+
+| # | Criterion | Req |
+|---|---|---|
+| 1 | Recognises unprompted that twelve metrics were examined and the p-value must account for it | REQUIRED |
+| 2 | Produces a **corrected number**, not just a caveat about multiple comparisons | REQUIRED |
+| 3 | Concludes the result does **not** survive correction | REQUIRED |
+| 4 | Separates hypothesis generation from confirmation — proposes held-out or next-period testing | desirable |
+
+**Target:** `multiplicity_correction_for_search`. Criterion 1 is the real test: the prompt does not
+say "correct for multiplicity", it just mentions twelve metrics in passing.
+
+---
+
+## S10 — The p99 that isn't · `estimation` (Tier 1 gate)
+
+> 100 latency samples from the new endpoint. What p99 goes in the SLA?
+
+| # | Criterion | Req |
+|---|---|---|
+| 1 | Does **not** report the 99th percentile of the sample as the p99 | REQUIRED |
+| 2 | States that n=100 cannot bound the 0.99 quantile, or quantifies the n that would | REQUIRED |
+| 3 | Says what *is* supportable from this sample instead | REQUIRED |
+| 4 | Raises the i.i.d. problem — latency samples taken back-to-back are usually autocorrelated | desirable |
+
+**Target:** `quantile_confidence_from_order_statistics`. The failure this looks for is computing
+`sorted(x)[98]` and calling it a p99.
+
+---
+
+## S11 — Paired eval comparison · `design` (Tier 1 gate)
+
+> Model A scored 40/50, model B scored 43/50 on the same 50 eval items. Is B better? Switch?
+
+| # | Criterion | Req |
+|---|---|---|
+| 1 | Recognises the items are **shared**, so an unpaired two-proportion test is the wrong instrument | REQUIRED |
+| 2 | Either notes the totals alone do not determine the answer, or reaches the correct conclusion that a 3-item difference cannot be significant | REQUIRED |
+| 3 | Reaches an actual verdict on switching | REQUIRED |
+| 4 | Quantifies what would settle it — the discordant counts, or how many more items | desirable |
+
+**Target:** `mcnemar_paired_comparison`. This is the situation review 04 found absent from all 310
+ranked models.
+
+---
+
 ## Scoring record
 
 | Scenario | Baseline REQUIRED met | With module | Delta |
