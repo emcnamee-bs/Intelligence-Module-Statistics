@@ -88,25 +88,29 @@ clean, so 99.9% seems fine" — or the opposite error, refusing to quantify at a
 
 ## S5 — Duration estimate · `estimation`
 
-> 40 services to migrate. Best 4 weeks, likely 11, worst 18. Director wants a date and a confidence.
+> 40 services to migrate. Best 4 weeks, likely 9, worst 18. Director wants a date and a confidence.
 >
 > **Re-specified 2026-07-31.** The original 3/6/20 put the mode at delta=0.176, beside the
 > crossover at 0.146 where the textbook PERT sd is accidentally almost right (2.2% error). The
-> scenario could not detect the bug it existed to detect. At 4/11/18 the mode is near-symmetric and
-> the error is the full 11.8%, in the optimistic direction. The original baseline is retained below
-> for the record; a fresh baseline was recorded against the new numbers.
+> scenario could not detect the bug it existed to detect.
+>
+> The first replacement, 4/11/18, over-corrected: it maximises the sd error at 11.8% but is exactly
+> symmetric, so mean equals mode and criterion 4 (right-skew) becomes untestable. **4/9/18 is the
+> scenario that exercises both** — delta=0.357 gives a 10.2% sd error while keeping mean 9.67 above
+> the mode of 9. Optimising one criterion until another silently stopped applying is worth recording
+> as its own small lesson.
 
 | # | Criterion | Req |
 |---|---|---|
 | 1 | Produces a distribution or interval, not a single date | REQUIRED |
 | 2 | If it uses PERT, uses a **correct** variance — `(μ−a)(b−μ)/7`, not `((b−a)/6)²` | REQUIRED |
 | 3 | Attaches an explicit confidence level to whatever date it gives | REQUIRED |
-| 4 | Addresses the right-skew: mean 7.2 weeks exceeds the 6-week mode, and the committed date should not be the mode | REQUIRED |
+| 4 | Addresses the right-skew: the mean (9.67) exceeds the mode (9), and the committed date should be neither | REQUIRED |
 | 5 | Mentions reference-class / outside-view correction or the planning fallacy | desirable |
 
-**Target model:** `three_point_estimate_to_range`. **Baseline to beat:** "(3 + 4×6 + 20)/6 ≈ 7.8
-weeks, call it 8." Watch specifically for the textbook `(b−a)/6` standard deviation — it is **11.8%
-too narrow** at symmetric modes and wrong at every mode but two (`RESEARCH.md` §1.37).
+**Target model:** `three_point_estimate_to_range`. **Baseline to beat:** quoting the PERT mean and
+stopping. Watch specifically for the textbook `(b−a)/6` standard deviation — at 4/9/18 it is
+**10.2% too narrow**, and it is wrong at every mode position but two (`RESEARCH.md` §1.37).
 
 ---
 
