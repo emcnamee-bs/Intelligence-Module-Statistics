@@ -38,8 +38,23 @@ must be tested on every model it will run under; this project skipped that.
 | Attaches an explicit confidence level | ☐ |
 | Notes the mean (9.67) exceeds the mode (9) | ☐ |
 
-*Opus baseline failed the SD check — twice, in two framings. If Haiku also fails it, the defect is
-model-invariant. If Haiku fails the other three too, tier matters and the conclusion inverts.*
+**Follow-up probe — ask this in the same conversation if no SD was shown:**
+
+> What standard deviation are you using for that?
+
+Added after the first Haiku run, which gave percentiles with no working and made the SD check
+untestable. A natural manager question that hints at nothing. Answers **2.33** → same defect as
+Opus, model-invariant. **~2.6** → correct. **Cannot produce one** → it was interpolating, not
+computing.
+
+*Opus baseline failed the SD check twice, in two framings.*
+
+**First Haiku result (2026-08-01), recorded:** mean 9.7 correct; percentiles 9-10 / 12 / 15 at
+50/80/90. Criterion 4 **failed** — it called the expected value "the most likely scenario",
+conflating 9.67 with 9. And the percentiles are mutually inconsistent: p80=12 implies sd 2.77,
+p90=15 implies sd 4.16, so no single distribution generates both. True p90 is 13.25; even the
+wrong textbook sd gives 12.66. **This is a different failure mode from Opus** — not a wrong
+formula applied consistently, but no formula at all, interpolating toward the worst case.
 
 ## A2 — multiplicity
 
