@@ -88,7 +88,13 @@ clean, so 99.9% seems fine" — or the opposite error, refusing to quantify at a
 
 ## S5 — Duration estimate · `estimation`
 
-> 40 services to migrate. Best 3 weeks, likely 6, worst 20. Director wants a date and a confidence.
+> 40 services to migrate. Best 4 weeks, likely 11, worst 18. Director wants a date and a confidence.
+>
+> **Re-specified 2026-07-31.** The original 3/6/20 put the mode at delta=0.176, beside the
+> crossover at 0.146 where the textbook PERT sd is accidentally almost right (2.2% error). The
+> scenario could not detect the bug it existed to detect. At 4/11/18 the mode is near-symmetric and
+> the error is the full 11.8%, in the optimistic direction. The original baseline is retained below
+> for the record; a fresh baseline was recorded against the new numbers.
 
 | # | Criterion | Req |
 |---|---|---|
@@ -138,6 +144,34 @@ much." Criterion 4 exists because that dismissal is the *expected* baseline fail
 **Target model:** `value_of_information_reachability`. **Baseline to beat:** qualitative
 pros-and-cons ending in "it depends on how risk-averse you are." This scenario is the gate itself
 (spec §5); if the module cannot beat the baseline here, the gate is not worth its tokens.
+
+---
+
+## S8 — The question nobody asked · embedded
+
+> Added 2026-07-31. Every other scenario hands the agent an explicit judgment question with the
+> numbers laid out and no competing work. Real situations are not like that: the statistical
+> question is implicit, and the agent is busy with something else. **This scenario tests whether the
+> baselines' strong performance survives when nobody points at the statistics.**
+>
+> If the baseline degrades here, the module's value proposition is restored. If it does not, Wave 1
+> should shrink substantially. That makes S8 the single most decision-relevant scenario in the set.
+
+The task given is a code review, not a statistics question. A performance claim based on three runs
+per arm is embedded in the PR description, where it reads as supporting evidence rather than as
+something to check.
+
+| # | Criterion | Req |
+|---|---|---|
+| 1 | Notices that the performance claim rests on 3 runs per arm at all | REQUIRED |
+| 2 | Does not accept "18% faster" as established | REQUIRED |
+| 3 | Recognises that p<0.05 is unreachable at n=3 per arm, or asks how many runs would be needed | REQUIRED |
+| 4 | Still completes the actual code review it was asked for | REQUIRED |
+| 5 | Quantifies what would settle it rather than only expressing doubt | desirable |
+
+**Target models:** `minimum_attainable_p_for_design`, `benchmark_runs_needed`.
+**The failure this looks for:** treating an embedded number as a fact because the task framing did
+not invite scrutiny of it.
 
 ---
 
