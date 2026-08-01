@@ -1020,3 +1020,132 @@ actually face.
    authoritative.
 4. **Wave 1 definition of done includes primary-source verification** of every constant in every
    model that ships.
+
+---
+
+## Part 3 — Review findings
+
+Five adversarial reviews run against the completed sweep and the revised spec. Full reports in
+`research/reviews/`. This section records only what changes the project.
+
+### 3.1 My territory design had gaps at the seams
+
+**Source:** review 04. The 13 territories collectively defer work to **six territories that were
+never commissioned**: regression, effect-size, multiple-testing, measurement-agreement,
+distribution-comparison, and prediction/coverage. A cut reading "belongs to territory X" where X does
+not exist is a **silent deletion**, and these account for roughly half the coverage gaps.
+
+This is a design error in how I partitioned the research, not a failure of any agent. Thirteen
+well-executed territories with unowned seams lose material that no individual report is responsible
+for noticing.
+
+### 3.2 Fifteen uncovered situations, several of them daily
+
+Review 04 brainstormed 55 agent situations *blind* — without reading the catalog — then checked each
+against the 310 ranked models. Fifteen had no adequate model. The ones that matter most are things
+agents hit constantly and that the commissioned territories had no natural home for:
+
+| Uncovered situation | Method |
+|---|---|
+| "My last 5 greps found nothing new — have I found everything?" | Good–Turing / Chao1 discovery saturation |
+| "Two reviewers found 2 of the same bugs — how many are left?" | Capture–recapture |
+| "A scored 40/50, B scored 43/50 **on the same items**" | McNemar (paired binary) |
+| "Three configs across twenty benchmarks" | Friedman (blocked k-sample) |
+| "Is this O(n²) or O(n log n)?" | Scaling-exponent fit |
+| "Do these two LLM judges agree?" | κ / Krippendorff α / ICC |
+| "Rank these from pairwise comparisons" | Bradley–Terry |
+| "I keep running checks — how do I not fool myself?" | Online FDR over an unbounded stream |
+| "How many records must I audit?" | Hypergeometric audit sampling |
+
+The discovery-saturation and capture–recapture entries are notable: both answer *"is my search
+finished?"*, which is among the most common judgment calls an agent makes, and neither appeared
+anywhere in 310 ranked models.
+
+### 3.3 Nine head-to-head contradictions between territories
+
+The territories do not merely overlap — in nine cases they **disagree**, which means at least one side
+is wrong and §1.16's convergence caveat does not apply. Notable:
+
+- **T06 vs T10** cut each other's stopping model. T06 cut Weitzman/Pandora's box as "almost never
+  available to an agent"; T10 ranked it **4th of 25** as "the exact situation an agent is in."
+- **T06 vs T09** on censoring: "agents almost never have censored data" versus "censoring is the
+  normal case." T09 is right — "still running, hasn't failed yet" is the agent's default data shape.
+- **T04** ranked Kruskal–Wallis while self-flagging Friedman as a 27th row it wanted; for the common
+  blocked design (k configs × n benchmarks) Kruskal–Wallis is simply **the wrong test**.
+- **KSG mutual information** cut for lacking `digamma`, which T09 needs anyway and reports as ~15 lines.
+- **Fault trees** cut because "agents do independent-probability arithmetic correctly unaided" — which
+  the existence of T05's row 9 contradicts.
+
+### 3.4 Nine more identity clusters — two larger than C1
+
+This is the most consequential finding for the build. §2.2 found three clusters; review 04 found nine
+more, and the largest subsumes the one I built the pilot around:
+
+| Cluster | Identity | Span |
+|---|---|---|
+| **C4** | exact discrete-tail inversion | **11 territories** — and **C1 is merely its k = 0 case** |
+| **C5** | `1 − (1−p)^k` | fan-out amplification ≡ return period ≡ **Šidák correction** ≡ reruns-to-confidence |
+| **C6** | design effect / effective n | **6 territories** — *cut* in T06, flagship in T08 |
+| **C7** | test inversion by bisection | 8 territories |
+| **C8** | **extremizing ≡ inverse temperature scaling** | a correctness hazard, not just duplication |
+
+Plus the Brier decomposition duplicated verbatim across T07/T08/T11, PAVA, the arithmetic-floor
+engine, and e-processes across five territories.
+
+**This changes the shape of the build entirely.** If one exact discrete-tail inversion engine spans
+eleven territories, the library is not 30 models over a thin numerics core — it is **roughly six
+well-tested engines** with many thin, situation-specific entry points routing into them. That is a
+smaller, more coherent, far more testable project than the spec describes.
+
+### 3.5 Thin families are thin from tier mismatch, not under-research
+
+- **Calibration**: only 4 rows usable at N < 25, and *all* of them blocked on having a prediction log.
+  Review 04's conclusion is sharp: **its Wave 1 deliverable is a logging protocol, not statistics.**
+  There is nothing to compute until the agent has been recording predictions and outcomes.
+- **Forecasting**: 23 rows collapse to 6 at n = 5–12.
+- **Causal**: 24 rows collapse to 6 INLINE, and it is a *sensitivity* family, not an estimation one.
+
+**Over-represented**: causal panel estimators (11), model-based EVT (11), bandit + MCDA variants (7),
+model-choice (4). Roughly 35 rows freed — which comfortably funds the ~15 additions, all of which are
+cheaper to build.
+
+### 3.6 The spec revision regressed the part that matters
+
+**Source:** review 03. Commit `cf1ecf9` replaced §5 "The skill" with §5 "The gate" and dropped §7
+entirely. The consequence: the spec now pins `lib/special.py` to the function level while the skill
+`name`, `description`, SKILL.md body structure, router output contract, and no-match floor are all
+**unspecified**. The only part an agent touches is the part with no specification.
+
+Also deleted: the guidance-form principle (conditionals on observable predicates, not prohibitions) —
+and the replacement gate is precisely the shape that principle warned against.
+
+### 3.7 The gate does not work
+
+**Sources:** reviews 01 and 03, independently.
+
+1. **EVPI was conflated with EVSI.** Under the specced CLI the loss table is fully determined, so
+   EVPI = min(p, 1−p)·L — nonzero unless p ∈ {0,1} or L = 0. Wave 0's acceptance criterion
+   ("must produce EVPI = 0") is **unsatisfiable under its own interface**. The three-line zero result
+   in §1.21 is *EVSI threshold reachability*, which needs the test's informativeness.
+2. **The routing table has an invalid direction.** EVSI(n) ≤ EVPI, so only the *stop* direction holds.
+3. **It is unpopulable**: 0 of 6 baseline scenarios cleanly, 5 requiring fabricated inputs — and it
+   demands exactly the class of number **P7 forbids the module from generating**, mandatorily and
+   first. EVPI is monotone in those fabricated inputs, so the verdict is set by the guess while
+   presenting as computed.
+4. **Nothing enforces it**, and the agent reaches the skill *because* it already decided statistics
+   were warranted, so the gate relitigates a decision one turn old.
+
+### 3.8 `BASELINE_WINS` is actively harmful as specified
+
+It prints a number at exit 0, indistinguishable from `OK`, so `if rc == 0: use the number` hands the
+agent the **baseline's** answer carrying the module's authority. A naive estimate acquiring false
+statistical provenance is worse than not running the module — this is §0.3's own refusal logic applied
+inconsistently to the mode most exposed to it. Separately, `baseline_to_beat` has no computable
+definition outside forecasting, and L4 contradicts §9 on whether the mode emits a number at all.
+
+### 3.9 The token claim was not honest
+
+Traced end to end: **~4,600 tokens favorable, ~8,000 realistic** — the same order as the +87%
+precedent cited as the thing to avoid, not "near-zero." Structurally, SKILL.md is the largest line
+item and is charged *before* the gate runs: the gate cannot save the tokens spent by the document
+telling it to run the gate.
