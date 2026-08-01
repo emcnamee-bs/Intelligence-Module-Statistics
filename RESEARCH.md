@@ -853,3 +853,62 @@ opposite directions (§1.16 caveat applies).
 
 Nice concrete instance for SKILL.md: **"what timeout should I set" is a newsvendor problem** — an
 asymmetric-loss Bayes action, not a percentile lookup.
+
+### 1.37 VERIFIED BUG CLASS: textbook PERT variance is internally inconsistent
+
+**Source:** a subagent of territory 03. **Independently re-derived and numerically confirmed by the
+orchestrator** — this one does not carry the §1.16 pseudo-replication caveat, because it was checked
+by derivation and simulation rather than accepted.
+
+Standard beta-PERT, given optimistic `a`, most likely `m`, pessimistic `b`:
+- `α = 1 + 4(m−a)/(b−a)`, `β = 1 + 4(b−m)/(b−a)`, so **α + β = 6** (not 8)
+- mean `μ = (a + 4m + b)/6`
+- **exact variance `= (μ−a)(b−μ)/7`**
+
+The classical companion formula `σ = (b−a)/6` **is not the standard deviation of that distribution.**
+The two textbook formulas are mutually inconsistent. With `δ = (m−a)/(b−a)`, the variance ratio is
+exactly:
+
+```
+R(δ) = Var_true / Var_classical = 5/7 + (16/7)·δ(1−δ)
+```
+
+Verified to machine precision at every mode position, plus a 4M-draw Monte Carlo check at the
+symmetric case:
+
+| Mode position δ | R(δ) | SD ratio | Effect of using (b−a)/6 |
+|---|---|---|---|
+| 0.0 or 1.0 (extreme) | 0.7143 | 0.8452 | **overstates SD by 18.3%** |
+| 0.14645 / 0.85355 | 1.0000 | 1.0000 | exact — the only two points where it is right |
+| 0.25 or 0.75 | 1.1429 | 1.0690 | understates by 6.5% |
+| **0.5 (symmetric)** | 1.2857 | 1.1339 | **understates by 11.8%** (true SD is 13.4% higher) |
+
+**Why this matters for this library.** Three-point estimation is one of the most-reached-for tools in
+the whole catalog — "give me a range for how long this will take" is the archetypal agent question,
+and territory 11 ranks PERT-family estimation highly. Anyone implementing the textbook formula gets a
+variance wrong by −18% to +29% depending on mode position, and **in the common symmetric case the
+error is optimistic — the interval is too narrow.**
+
+An overconfidence-correcting module that ships a silently over-narrow interval on its most-used
+estimator would be actively counterproductive. This is the §1.2 `naive_answer_is_wrong` category, and
+it is the strongest single argument in the sweep for the L2 requirement that every model carry golden
+cases checked against published reference values rather than against a remembered formula.
+
+**Action:** ship `(μ−a)(b−μ)/7`. Where the classical `(b−a)/6` is expected by a user, print both and
+label the discrepancy. Add the R(δ) identity to the L1 test suite at δ ∈ {0, 0.14645, 0.5, 0.85355, 1}.
+
+### 1.38 Process note: the forecasting territory over-delegated
+
+Territory 03 spawned its own subagents and then spent effort on inter-agent addressing rather than
+research, with two subagents surfacing routing questions to the orchestrator instead of findings. The
+research content was sound; the coordination was waste.
+
+Recorded because it is the same class of failure the module is meant to guard against elsewhere:
+**work expanded to fill an available mechanism without anyone checking whether it improved the
+answer.** The value-of-information check in §1.21 is the formal version of the question that should
+have been asked before delegating.
+
+Two citation corrections surfaced by that chain, worth keeping:
+- Jewell/Lewnard/Jewell IHME critique is **Annals of Internal Medicine 173(3):226–227**, not JAMA.
+- Ioannidis/Cripps/Tanner (2022) contains **no numeric forecast-error magnitudes**; citable for its
+  failure taxonomy and its "model predictive distributions, not point estimates" prescription only.
