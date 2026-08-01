@@ -198,7 +198,7 @@ change the design**; per-model detail stays in the territory files.
 |---|---|---|---|
 | 01 | Bayesian inference & decision theory | ✅ `01-bayesian-decision-inference.md` | 26 + 26 cut |
 | 02 | Causal inference | ✅ `02-causal-inference.md` | 24 + 15 cut |
-| 03 | Forecasting & time series | pending | — |
+| 03 | Forecasting & time series | ✅ `03-forecasting-time-series.md` | 23 + 22 cut |
 | 04 | Robust & nonparametric | ✅ `04-robust-nonparametric.md` | 26 + 30 cut |
 | 05 | Extreme value & tail risk | ✅ `05-extreme-value-tail-risk.md` | 24 + 20 cut |
 | 06 | Sequential design & stopping | ✅ `06-sequential-design-stopping.md` | 25 + 15 cut |
@@ -912,3 +912,111 @@ Two citation corrections surfaced by that chain, worth keeping:
 - Jewell/Lewnard/Jewell IHME critique is **Annals of Internal Medicine 173(3):226–227**, not JAMA.
 - Ioannidis/Cripps/Tanner (2022) contains **no numeric forecast-error magnitudes**; citable for its
   failure taxonomy and its "model predictive distributions, not point estimates" prescription only.
+
+### 1.39 Territory 03 closing findings
+
+- **The gate for the whole family**: rolling-origin backtest with a **MASE scorecard**. `MASE ≥ 1`
+  means the model does not beat the naive forecast, and the tool should **print the naive forecast
+  instead**. A hard, computable, non-negotiable edge — the forecasting family's own Tier 0.
+- **Theta / SES-with-drift** (M3 winner) is ~40 lines, works at n = 5, and degrades gracefully toward
+  naive as noise rises. **Damped-trend exponential smoothing** is described in the literature as "a
+  benchmark for all others to beat." Both trivially stdlib.
+- **12 of M4's 17 most accurate methods were combinations.** Simple mean/median combination is a
+  top-5 method on its own.
+- The territory's central pathology is that **prediction intervals are systematically too narrow**;
+  empirical/conformal intervals are the fix. Third territory to land on conformal methods (with 04
+  and 09).
+- **M5's "pure ML finally wins" result does not transfer.** It depended on 42,840 related series plus
+  exogenous variables. An agent holding one 12-point series has neither.
+- Independently re-derived the §1.37 PERT result to machine precision.
+- **Exemplary integrity handling**: the report ships a per-source verification ledger, tags the M4/M5
+  headline numbers and SBC routing cutoffs (ADI 1.32 / CV² 0.49) as UNVERIFIED inline, and
+  **deliberately quotes no OWA/sMAPE point values at all** rather than cite unverifiable figures. One
+  gap named honestly: no published constant exists for how much of a growth curve must be observed
+  before capacity K is estimable, so that refusal rule is labelled a geometric heuristic, not a
+  citable constant. This is the standard for the rest of the project.
+
+---
+
+## Part 2 — Synthesis
+
+**Sweep complete: 13 territories, 310 models ranked, 266 explicitly cut, 576 candidates evaluated.**
+
+### 2.1 Ten principles the sweep produced
+
+These emerged from the territories rather than being imposed on them, and several arrived from two or
+more independent directions. They govern the library.
+
+| # | Principle | Origin |
+|---|---|---|
+| **P1** | **Exactness comes from enumeration under exchangeability, not from resampling.** Permutation, rank-statistic DP, order statistics, `math.comb` — these are exact. The bootstrap is an asymptotic approximation that merely shares the mechanism, and it fails hardest at agent-scale n | §1.27 (measured) |
+| **P2** | **Never route on an assumption test.** A passing check is not evidence unless its power against the specific failure has been established. Failed three times independently: Shapiro–Wilk at n<15, pre-trend tests, rank-based SBC | §1.1, §1.28, §1.34 |
+| **P3** | **Trust thresholds scale with n**, and several are arithmetic impossibilities rather than conventions (p<0.05 unreachable at n=3; no upper CI above p97 at n=100; AIC/BIC penalties cross at n=e²) | §1.13, §1.29 |
+| **P4** | **Report breakdown values, not pass/fail.** "How strong would the violation have to be to overturn this?" beats "assumption: OK" | §1.1 |
+| **P5** | **The dangerous failures are composition, provenance, and incomplete reporting — not model choice.** Five composition hazards found | §1.11, §1.32 |
+| **P6** | **Pseudo-replication is the dominant violation when combining sources.** k agents on one base model are one source sampled k times | §1.16 |
+| **P7** | **The module consumes stated numbers; it never generates them.** LLM-elicited priors measure at effective sample size zero | §1.17 |
+| **P8** | **The decision to use statistics is itself computable.** EVPI reachability replaces the judgment heuristic | §1.21 |
+| **P9** | **Every model declares the baseline it must beat, and prints the baseline instead when it doesn't.** MASE ≥ 1 → print the naive forecast | §1.39 |
+| **P10** | **Big-data ML benchmark results do not transfer to agent scale.** M5 needed 42,840 series; a random-scoring anomaly detector hits SOTA under the standard protocol | §1.31, §1.39 |
+
+P9 deserves emphasis: it generalizes the forecasting family's MASE gate into a library-wide contract.
+Every registry entry names a `baseline_to_beat`, and every model computes it. A statistical model that
+cannot beat the naive alternative on the data in hand is not a better answer — it is a more expensive
+one wearing better clothes, which is exactly the failure mode this project exists to prevent.
+
+### 2.2 Identity clusters — the registry has fewer implementations than entries
+
+Three clusters of "different models that are the same mathematics" surfaced independently:
+
+| Cluster | The single identity | Appears as |
+|---|---|---|
+| **C1** | `n ≥ ln(α)/ln(p)` | rule of three; Wilks tolerance intervals; upper CI on a high quantile; zero-failure MTBF bound; flaky-or-unlucky reruns-to-confidence |
+| **C2** | marginal EVSI = marginal cost | closed-form EVSI/ENBS; exact Beta-Binomial EVSI; Weitzman reservation values; optimal sample size; stop-or-continue |
+| **C3** | exact null by dynamic programming over rank statistics | permutation test; Mann–Whitney; Wilcoxon signed-rank; exact CI by test inversion |
+
+C1 alone spans four families (tail-risk, reliability, monitoring, evidence-sufficiency) and was found
+by three territories that did not talk to each other.
+
+**Consequence for the build:** one tested implementation, many registry entries with family-specific
+`situations` phrasing routing into it. This substantially reduces the true cost of Wave 1 and is the
+reason a dedup pass must run before any code is written.
+
+### 2.3 Composition hazards — the errors no single model can catch
+
+| Hazard | Consequence |
+|---|---|
+| Detected changepoint → interrupted time series | Invalidates the inference; the date must be a priori |
+| Adaptive collection → classical pooling | Breaks every method; e-value products are the fix |
+| Correlated sources → Bayesian chaining or extremizing | Compounds one piece of evidence into false certainty |
+| Overlapping monitoring rules → additive false-alarm rates | ARL₀ 370→91.75, but naive addition gives 52 (wrong by ~76%) |
+| Parameter posterior → next-observation question | Omits observation noise, usually the larger term |
+
+These motivate the `composition_hazards` registry field and are the strongest argument that this is a
+**skill** and not a folder of scripts. No individual model can detect any of them.
+
+### 2.4 Net effect on the build
+
+Every territory that reported on feasibility **shrank** the estimated core:
+
+- `lib/special.py` → two functions (regularized incomplete beta, incomplete gamma + inverse)
+- `lib/mcmc.py` → out of the Wave 0 critical path; grid quadrature covers ≤3 parameters exactly
+- `lib/resample.py` → splits; `lib/exact.py` into the core, bootstrap demoted behind refusals
+- Distribution sampling → free; `random` already ships what is needed
+- Measured timings confirm nothing is computationally hard in pure Python at agent scale
+
+The pure-stdlib constraint cost the project **almost nothing in capability** and bought portability,
+auditability, and — via P1 and P10 — methods that are *more* correct at the sample sizes agents
+actually face.
+
+### 2.5 Standing caveats carried into implementation
+
+1. **§1.16 applies to this whole document.** Thirteen agents on one base model are not thirteen
+   independent sources. Convergent findings are hypotheses, not confirmations. The two findings
+   verified by independent derivation (§1.27 measured, §1.37 re-derived) are the exceptions.
+2. **Citation density is uneven.** Five territories exhausted their web-search budget. Every report
+   flags its own unverified constants; territory 03 ships a per-source ledger and is the model.
+3. **No unverified constant may enter a shipped lookup table.** An agent treats a shipped number as
+   authoritative.
+4. **Wave 1 definition of done includes primary-source verification** of every constant in every
+   model that ships.
