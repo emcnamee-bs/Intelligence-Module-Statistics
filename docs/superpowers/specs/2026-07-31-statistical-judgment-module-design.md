@@ -308,7 +308,66 @@ outside stdlib and `lib/`.
 
 **→ Review gate.**
 
-### Wave 1 — the remaining ten entry points, plus the calibration logging protocol. **→ Review gate.**
+### Wave 1 — reordered by fact-density (2026-07-31, after the L6 measurement)
+
+`evals/RESULTS-wave0.md` produced one finding that outranks the rest: **the strongest single result
+came from `minimum_attainable_p_for_design`, the cheapest model in the catalogue and the one that
+performs no statistics at all.** It states a fact about what a design can express. The
+computation-heavy pilots produced smaller gains.
+
+Wave 1 is therefore ordered by **fact-density** — how much of a model's value is a fact the agent
+cannot know, versus arithmetic it could perform — rather than by the frequency × leverage ×
+feasibility ranking the research sweep produced. Where the two disagree, the measurement wins.
+
+**Tier 1 — facts about what the data can express.** Same shape as the model that won S8: cheap, no
+statistics to speak of, unanswerable from training data.
+
+| # | Entry point | Why first |
+|---|---|---|
+| 1 | `multiplicity_correction_for_search` | Makes the agent *count the comparisons it made*, including abandoned ones. The correction is one line; the value is entirely in forcing the count. Highest fact-density in the catalogue, zero library dependencies. Cluster C5. |
+| 2 | `quantile_confidence_from_order_statistics` | "At n=100 there is no upper bound above p97 — your p99 is not a statistic." Structurally identical to the p-floor that won S8. Cluster C1/C4. |
+| 3 | `mcnemar_paired_comparison` | The fact is *you are running the wrong test* — paired evaluations compared with an unpaired one. The arithmetic is an exact binomial on discordant pairs. |
+
+**Tier 2 — refusals that catch a default behaviour.** Lower fact-density, but each intercepts
+something an agent does by default and does wrong.
+
+| # | Entry point | Why |
+|---|---|---|
+| 4 | `pool_probabilities_with_dependence_discount` | P6 pseudo-replication, the highest-leverage guard the sweep found. Vovk–Wang proved valid *and tight*. |
+| 5 | `pool_evidence_from_adaptive_collection` | "Decide whether to run study k+1 based on study k" is the agent's default workflow, and it breaks classical pooling. |
+| 6 | `exchangeability_breakdown_value` | Underwrites P1. Must emit a breakdown value, never a pass/fail test, or it recreates the P2 failure. |
+
+**Tier 3 — situations with no baseline competence.** Absent from all 310 ranked models, so there is
+no evidence either way. Included because the *situations* are common, not because the mathematics is.
+
+| # | Entry point | Why |
+|---|---|---|
+| 7 | `discovery_saturation` | "My last five greps found nothing new — am I done?" Arguably the most common judgment an agent makes. |
+| 8 | `capture_recapture_remaining` | "Two reviewers found 2 of the same bugs — how many are left?" |
+
+**Tier 4 — computation-dominant. Weakest measured support; build last or not at all.**
+
+| # | Entry point | Status |
+|---|---|---|
+| 9 | `scaling_exponent_fit` | Retained. "Is this O(n²)?" is common and agents eyeball it, but the value is a regression the agent could run itself. |
+| 10 | ~~`bayes_action_under_stated_loss`~~ | **CUT.** It requires a stated loss table — precisely the input review 03 measured as unpopulable in five of six real scenarios, and the reason the value-of-information gate was retired. Building a model whose required input is already known to be unavailable would repeat a mistake this project has made once. |
+
+**Also in Wave 1, not a model:** the calibration **logging protocol**
+(`docs/families/calibration.md`). Nothing in that family is computable below 120–260 logged
+predictions, so the deliverable is the recording discipline, not a script.
+
+**New candidate raised by the evaluation itself**, to be scoped before Wave 2: both S5 arms
+independently asked whether 40 service estimates are *independent* or *one estimate multiplied by
+40* (common-mode uncertainty), and whether parallel workstreams make the finish a maximum rather
+than a sum. Neither is modelled. This is pseudo-replication appearing in estimation, and it was
+found by the evaluation rather than by the research sweep — which is an argument for running
+evaluations earlier in future.
+
+**Explicitly not built:** models for S2, S3, S4, S6, S7. Three of those were baseline **full marks**
+unaided. Building there would be building where the measurement says there is no gap.
+
+**Gate after Tier 1:** re-run L6. If the three Tier 1 models do not move their criteria the way the
+Wave 0 pilots did, stop and reconsider rather than continuing through Tiers 2–4.
 
 ### Wave 2 — only if L6 shows a real delta. Anything further is justified by measurement, not ambition.
 
