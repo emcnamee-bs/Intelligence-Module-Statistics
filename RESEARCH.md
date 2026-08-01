@@ -203,10 +203,10 @@ change the design**; per-model detail stays in the territory files.
 | 05 | Extreme value & tail risk | ✅ `05-extreme-value-tail-risk.md` | 24 + 20 cut |
 | 06 | Sequential design & stopping | ✅ `06-sequential-design-stopping.md` | 25 + 15 cut |
 | 07 | Calibration & forecast scoring | ✅ `07-calibration-forecast-scoring.md` | 23 + 22 cut |
-| 08 | Evidence synthesis & aggregation | pending | — |
+| 08 | Evidence synthesis & aggregation | ✅ `08-evidence-synthesis-aggregation.md` | 23 + 20 cut |
 | 09 | Reliability, survival & duration | ✅ `09-reliability-survival-duration.md` | 23 + 22 cut |
 | 10 | Decision, bandits & value of information | pending | — |
-| 11 | Elicitation & subjective estimation | pending | — |
+| 11 | Elicitation & subjective estimation | ✅ `11-elicitation-subjective-estimation.md` | 22 + 14 cut |
 | 12 | Model selection & information theory | ✅ `12-model-selection-information-theory.md` | 22 + 20 cut |
 | 13 | Monitoring, anomaly & changepoint | pending | — |
 
@@ -476,3 +476,83 @@ different names across families**, exactly as the cross-territory-overlap sectio
 surface. Dedup pass required before the registry is written: one implementation, multiple registry
 entries pointing at it with family-specific `situations` phrasing. The router should route on the
 situation; the code should exist once.
+
+### 1.16 The most important finding of the sweep: pseudo-replication
+
+**Source:** territory 08. The agent's dominant assumption violation when combining sources is **not**
+heterogeneity — the thing every meta-analysis textbook prepares you for. It is **pseudo-replication**:
+k sub-agents querying one base model are near-perfectly correlated, so they are not k independent
+sources. They are approximately one source sampled k times.
+
+Consequences, in order of severity:
+- **Naive Bayesian chaining is catastrophic.** Updating on k correlated reports as though independent
+  compounds the same evidence k times and drives posteriors to certainty on no new information.
+- **Extremization is actively harmful.** The Good Judgment Project's extremizing transform assumes
+  diverse, partially-independent forecasters. Applied to correlated agents it amplifies a shared
+  error.
+- Standard heterogeneity statistics (Q, I², τ²) will report *agreement*, which looks like corroboration
+  and is actually the symptom.
+
+This is the module's single highest-leverage guard, because the failure is invisible: correlated
+agents agreeing looks exactly like independent agents converging on truth, and the naive statistics
+actively reassure you.
+
+**Note on this research sweep itself.** Thirteen agents on one base model produced these reports. The
+finding applies. Where two territories independently converged (e.g. §1.12's numerics conclusion, the
+rule-of-three appearing in both 05 and 09), that convergence is **weaker evidence than it appears** —
+shared priors, not independent confirmation. Treated accordingly: convergent findings are logged as
+hypotheses to verify against primary sources during implementation, not as settled.
+
+**Action:** the synthesis family must ask for source independence before pooling, and refuse — or
+apply a correlation-adjusted effective-k — when sources share a generator. Registry gains an
+`independence_required` marker alongside `data_provenance_required` (§1.10).
+
+Mitigation available and cheap: **Vovk & Wang (AoS 2022) — twice the arithmetic mean of p-values is a
+valid p-value under *arbitrary* dependence.** One line of code, no independence assumption. That is
+precisely the agent's epistemic position, and it should be the default pooling method with
+independence-assuming methods as the opt-in.
+
+### 1.17 Design implication: the module consumes stated numbers, it must not generate them
+
+**Source:** territory 11. Measurement (arXiv:2402.07770) finds LLM-elicited priors frequently have
+**effective sample size zero** — worse than uninformative, beaten immediately by minimal real data.
+Observed pathologies include prior–data conflict, absurd tail concentration (one model emitting beta
+α ≥ 1000), and expert role-play prompting having no measurable effect.
+
+This is the elicitation territory's own warning label, and it sets a hard boundary for the module:
+**take stated numbers as input; spend all effort checking, propagating, and stress-testing them;
+never invent them.** A script that asks the agent for a prior is fine. A script that generates one on
+the agent's behalf is a liability.
+
+This also resolves an ambiguity in the design: the INLINE tier is not "the agent makes up numbers."
+It is "the agent or user states numbers, and the module does the arithmetic they cannot do reliably
+in their head."
+
+### 1.18 Two headline results worth putting in SKILL.md verbatim
+
+Both from territory 11; both are cases where agent intuition is wrong by orders of magnitude.
+
+1. **Uncertainty does not compound the way it looks like it should.** k factors each uncertain by a
+   factor of f multiply to a spread of `f^√k`, **not** `f^k`. Four factors each ±3× give a **9×**
+   product spread, not 81×. Nine factors give 27×, not 19,683×. Errors partially cancel in log space.
+   Agents get this wrong in *both* directions — over-widening Fermi estimates and under-widening
+   sequential ones.
+2. **Averaging scenario point estimates deletes most of the uncertainty.** In a worked three-scenario
+   example, **92% of total variance is between-scenario** — exactly the term discarded when you
+   average the three midpoints.
+
+### 1.19 Stdlib windfall
+
+`random` already ships `betavariate`, `gammavariate`, `lognormvariate`, `triangular`, `gauss`,
+`expovariate`, `weibullvariate`, `paretovariate`. The entire Monte Carlo propagation layer is
+therefore **free** — no distribution sampling to implement. Combined with §1.12, the build cost of
+`lib/` keeps falling as research lands.
+
+### 1.20 Research-quality caveats logged
+
+- Territories 08 and 11 both hit a 200-call web-search session cap; some sources were covered from
+  domain knowledge rather than fresh citation. Flagged for verification before those models ship.
+- Territory 11 flags two specific unverified sources — the Mauboussin HBR per-phrase probability
+  spreads (paywalled) and the UK DfT per-sector optimism-bias uplift table. **Neither may enter a
+  shipped datafile as-is.** Any lookup table the module ships must have a verified primary source,
+  since an agent will treat a shipped number as authoritative.
