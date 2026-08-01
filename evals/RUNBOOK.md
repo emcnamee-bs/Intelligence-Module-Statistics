@@ -216,3 +216,46 @@ testing discovery, not capability — the question is whether the skill fires on
 If A shows tier-dependence, the honest next step is not "build Tiers 2–4" but "re-run the full
 9-scenario eval on the weaker tier", because the ordering principles were derived from Opus
 behaviour and may not transfer either.
+
+---
+
+# Results log
+
+## 2026-08-01 — Haiku 4.5, A1 paired (baseline vs module)
+
+The skill was installed between the two runs, which accidentally produced the cleanest comparison
+in the project: same model, same prompt, module absent then present.
+
+| A1 check | Baseline | With module |
+|---|---|---|
+| Interval, not a single date | pass | pass |
+| Coherent spread | **fail** — p80=12 implies sd 2.77, p90=15 implies sd 4.16 | pass — single coherent 12.0 |
+| Explicit confidence | pass | pass |
+| Mean (9.67) distinguished from mode (9) | **fail** — called the mean "the most likely scenario" | pass — "the long tail pulls the true expected value up to 9.67" |
+
+**First evidence against the near-redundancy conclusion.** On Opus, S5 also gained, so A1 gains at
+both tiers — but the Haiku baseline failed *differently*: not a wrong formula applied consistently,
+but no formula at all. A script supplies exactly what is missing there, which is a stronger case
+than the Opus evidence produced.
+
+n = 1. Not sufficient to revise the conclusion, sufficient to require A2–A4 unaided.
+
+## 2026-08-01 — Haiku 4.5, Test B triggering (A1–A4 with skill installed)
+
+Skill fired **unprompted on all four prompts**, named in none of them, and executed the scripts
+correctly each time. Outputs were near-verbatim `REPORT AS` lines, all verified:
+9.67/12 at 80% · corrected p = 0.306 · 299 samples · best-case p = 0.25.
+
+**Test B's discovery question passes on Haiku.** The negative control (B3) has not been run, so
+false-positive rate is still unmeasured — passing B1/B2-style triggering without B3 measures
+eagerness, not precision.
+
+One error, not from the module: the A3 answer suggested reporting the sample max "flagged as likely
+to be underestimated". P(max of 100 > true p99) = 1 − 0.99¹⁰⁰ = 63.4%, so the max *over*estimates
+roughly two times in three.
+
+## Outstanding
+
+- A2–A4 **unaided** on Haiku — disable with
+  `mv ~/.claude/skills/statistical-judgment ~/.claude/skills/.off-statistical-judgment`
+- B3 negative control
