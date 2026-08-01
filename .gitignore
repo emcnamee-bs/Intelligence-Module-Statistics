@@ -1,0 +1,14 @@
+# Local working context — NOT for this public repo.
+# CLAUDE.md describes internal BrightSign repositories, engineering wiki contents,
+# cloud architecture, and unreleased provisioning work. Deliberately excluded so a
+# later `git add -A` cannot sweep it into a public commit.
+CLAUDE.md
+tdd.md
+ubiquitous_language.md
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.DS_Store
