@@ -1,0 +1,183 @@
+{
+  "schema_version": 1,
+  "_note": "Single source of truth. INDEX.md and docs/families/*.md are generated from this file by generate_docs.py and must never be hand-edited. Only shipped models appear here: a registry entry for a script that does not exist would route an agent to a dead path.",
+  "families": [
+    {
+      "id": "design",
+      "question": "Can this design answer my question at all, and how much data do I need?"
+    },
+    {
+      "id": "estimation",
+      "question": "How big is it, and how sure am I?"
+    },
+    {
+      "id": "causal",
+      "question": "Did X actually cause Y?"
+    }
+  ],
+  "engines": [],
+  "models": [
+    {
+      "id": "minimum-attainable-p-for-design",
+      "path": "models/design/minimum_attainable_p_for_design.py",
+      "engine": null,
+      "family": "design",
+      "title": "Minimum attainable p-value for this design",
+      "situations": [
+        "can this test even reach significance with so few runs",
+        "is my sample too small to prove anything",
+        "three runs each, can I get a p value",
+        "why can't I get a significant result from this comparison",
+        "before and after on five items, is that enough"
+      ],
+      "keywords": [
+        "p-value",
+        "significance",
+        "sample size",
+        "small sample",
+        "permutation",
+        "paired",
+        "two-sample",
+        "floor",
+        "underpowered",
+        "design"
+      ],
+      "tier": "INLINE",
+      "usage": "--n1 N --n2 N   |   --pairs N   [--alpha 0.05] [--sided 2]",
+      "output": "smallest p the design can produce, and whether alpha is reachable at all",
+      "selection_limb": "a",
+      "baseline_to_beat": null,
+      "refuses_when": "a group size below 1, both designs given at once, or alpha outside (0,1)",
+      "unanswerable_when": null,
+      "composition_hazards": [],
+      "data_provenance_required": null,
+      "independence_required": false,
+      "evidence": "No recorded baseline in evals/baselines/ mentioned the attainability floor. Encodes a fact rather than a computation."
+    },
+    {
+      "id": "benchmark-runs-needed",
+      "path": "models/design/benchmark_runs_needed.py",
+      "engine": null,
+      "family": "design",
+      "title": "Benchmark runs needed per arm",
+      "situations": [
+        "how many times should I run this benchmark",
+        "how many samples do I need to detect a slowdown",
+        "is five runs enough to tell if it got slower",
+        "how much data do I need before I can decide",
+        "planning a performance comparison, what sample size"
+      ],
+      "keywords": [
+        "benchmark",
+        "runs",
+        "sample size",
+        "power",
+        "regression",
+        "slowdown",
+        "detect",
+        "how many",
+        "planning",
+        "minimum detectable effect"
+      ],
+      "tier": "MUST-CONSTRUCT-DATA",
+      "usage": "--effect DELTA (--sd SD | --pilot v1,v2,...) [--power 0.8] [--alpha 0.05]",
+      "output": "runs per arm needed; with --pilot, widened for uncertainty in the sd estimate",
+      "selection_limb": "a",
+      "baseline_to_beat": "the conventional default of 30 runs per arm",
+      "refuses_when": "effect not positive, neither or both of --sd/--pilot, fewer than 2 pilot values, or zero pilot spread",
+      "unanswerable_when": "the required runs exceed what any workflow could execute, meaning the effect is not measurable against this noise",
+      "composition_hazards": [
+        "Do not feed the same pilot runs into the comparison you are sizing. Reusing them makes the test optimistic; collect fresh runs."
+      ],
+      "data_provenance_required": "pilot runs must be interleaved or randomised, not all-old-then-all-new; sequential collection makes the sd estimate reflect drift rather than noise",
+      "independence_required": true,
+      "evidence": "Baseline S1 computed a correct Welch t-test on 5 runs and never asked how many were needed; it scored 3/4 for that omission."
+    },
+    {
+      "id": "three-point-estimate-to-range",
+      "path": "models/estimation/three_point_estimate_to_range.py",
+      "engine": null,
+      "family": "estimation",
+      "title": "Three-point estimate to a range (beta-PERT)",
+      "situations": [
+        "how long will this take, best case worst case most likely",
+        "turn optimistic and pessimistic estimates into a date",
+        "what date should I commit to and with what confidence",
+        "give me a range from a three point estimate",
+        "PERT estimate for this project"
+      ],
+      "keywords": [
+        "estimate",
+        "PERT",
+        "three-point",
+        "duration",
+        "how long",
+        "schedule",
+        "optimistic",
+        "pessimistic",
+        "range",
+        "commit",
+        "deadline",
+        "percentile"
+      ],
+      "tier": "INLINE",
+      "usage": "-o OPTIMISTIC -m LIKELY -p PESSIMISTIC [--commit 80] [--unit weeks]",
+      "output": "mean, correct sd, requested percentiles, and the error in the textbook sd",
+      "selection_limb": "b",
+      "baseline_to_beat": null,
+      "refuses_when": "estimates not ordered optimistic <= likely <= pessimistic, or zero range",
+      "unanswerable_when": null,
+      "composition_hazards": [
+        "Summing per-task PERT estimates understates the total's spread unless the tasks are independent, and understates the duration of parallel workstreams entirely, where the finish time is the maximum rather than the sum."
+      ],
+      "data_provenance_required": null,
+      "independence_required": false,
+      "evidence": "Baseline S5 used the textbook sd (b-a)/6, which is not the standard deviation of the distribution whose mean is (a+4m+b)/6. Corrects a formula reproduced wrongly."
+    },
+    {
+      "id": "unmeasured-confounding-breakdown-value",
+      "path": "models/causal/unmeasured_confounding_breakdown_value.py",
+      "engine": null,
+      "family": "causal",
+      "title": "Unmeasured-confounding breakdown value (E-value)",
+      "situations": [
+        "how fragile is this causal claim to something we didn't measure",
+        "could a confounder explain away this association",
+        "we controlled for the obvious things, is that enough",
+        "how strong would a hidden variable have to be to kill this result",
+        "is this correlation actually causal"
+      ],
+      "keywords": [
+        "confounding",
+        "confounder",
+        "causal",
+        "e-value",
+        "sensitivity",
+        "robustness",
+        "observational",
+        "explain away",
+        "risk ratio",
+        "odds ratio",
+        "hazard ratio",
+        "adjusted",
+        "adjustment",
+        "effect",
+        "association",
+        "believable"
+      ],
+      "tier": "INLINE",
+      "usage": "(--rr X | --or X [--rare] | --hr X | --smd D) [--ci-low L --ci-high H]",
+      "output": "the confounder-association strength needed with both exposure and outcome to nullify the effect",
+      "selection_limb": "a",
+      "baseline_to_beat": null,
+      "refuses_when": "a non-positive ratio, --rare without --or, one confidence limit without the other, or a reversed interval",
+      "unanswerable_when": "the observed effect sits exactly on the null, so there is no association to explain away",
+      "composition_hazards": [
+        "The E-value bounds unmeasured confounding only. It says nothing about selection bias, measurement error, or reverse causation, and quoting it as general robustness overstates what it covers."
+      ],
+      "data_provenance_required": "the effect must already be adjusted for measured confounders; an unadjusted estimate makes the E-value meaningless",
+      "independence_required": false,
+      "evidence": "Reports a breakdown value rather than an assumption test, per principle P4: screening on a low-power assumption check selects for datasets where the violation was invisible."
+    }
+  ]
+}

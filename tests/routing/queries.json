@@ -1,0 +1,40 @@
+{
+  "_note": "L5 routing eval set. Two halves, both load-bearing. `should_match` measures recall: can an agent describing its predicament in its own words find the right model? `should_match_nothing` measures false-positive control: a router that always returns something turns the whole module into noise, and cc-thinking-skills validates its own router on exactly these two axes.\n\nThe no-match floor in route.py is CALIBRATED against this file, not chosen. tests/routing/test_route.py recomputes the calibration and asserts the constant, so the floor cannot drift into being a voodoo constant.\n\nQueries are deliberately phrased the way an agent would describe the situation mid-task, not in the model's vocabulary - skill-retrieval research finds terminology mismatch to be the dominant failure of naive selection.",
+
+  "should_match": [
+    {"q": "I only have 3 runs of each version, can I say anything statistically", "expect": "minimum-attainable-p-for-design"},
+    {"q": "is a paired test on 5 before-and-after measurements able to reach significance", "expect": "minimum-attainable-p-for-design"},
+    {"q": "why can't this comparison produce a significant p value", "expect": "minimum-attainable-p-for-design"},
+    {"q": "my sample is tiny, is it even worth running the test", "expect": "minimum-attainable-p-for-design"},
+
+    {"q": "how many times do I need to run the benchmark to catch an 8% slowdown", "expect": "benchmark-runs-needed"},
+    {"q": "is five runs enough to tell whether the new build is slower", "expect": "benchmark-runs-needed"},
+    {"q": "planning a perf comparison, what sample size should I use", "expect": "benchmark-runs-needed"},
+    {"q": "how much data should I collect before deciding on this regression", "expect": "benchmark-runs-needed"},
+
+    {"q": "the team says best case 4 weeks likely 11 worst case 18, what do I tell my director", "expect": "three-point-estimate-to-range"},
+    {"q": "turn an optimistic and pessimistic estimate into a date I can commit to", "expect": "three-point-estimate-to-range"},
+    {"q": "how long will the migration take and how confident should I be", "expect": "three-point-estimate-to-range"},
+    {"q": "I need a range for this project estimate not a single number", "expect": "three-point-estimate-to-range"},
+
+    {"q": "could something we didn't measure explain away this association", "expect": "unmeasured-confounding-breakdown-value"},
+    {"q": "how fragile is this causal claim to a hidden variable", "expect": "unmeasured-confounding-breakdown-value"},
+    {"q": "we adjusted for the obvious confounders, is the effect believable", "expect": "unmeasured-confounding-breakdown-value"},
+    {"q": "is this correlation strong enough to call causal", "expect": "unmeasured-confounding-breakdown-value"}
+  ],
+
+  "should_match_nothing": [
+    {"q": "how do I rebase this branch onto main", "why": "version control, no statistical content"},
+    {"q": "write me a python function to parse a csv file", "why": "ordinary coding task"},
+    {"q": "what is the capital of France", "why": "factual lookup"},
+    {"q": "refactor this class to use dependency injection", "why": "design work, no uncertainty"},
+    {"q": "the server returns 502 on every request", "why": "a determined fact, not a judgment under uncertainty"},
+    {"q": "summarise this document for me", "why": "no quantity involved"},
+    {"q": "should I use tabs or spaces", "why": "a preference, and cheap to reverse - Tier 0"},
+    {"q": "explain how tcp handshakes work", "why": "explanation, nothing to estimate"},
+    {"q": "my test suite takes 40 minutes to run", "why": "a statement of fact with no question posed"},
+    {"q": "rename this variable everywhere in the repo", "why": "mechanical edit"},
+    {"q": "what does this stack trace mean", "why": "diagnosis from a determined artefact"},
+    {"q": "generate a changelog from these commits", "why": "summarisation"}
+  ]
+}
