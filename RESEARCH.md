@@ -208,7 +208,7 @@ change the design**; per-model detail stays in the territory files.
 | 10 | Decision, bandits & value of information | ✅ `10-decision-bandits-voi.md` | 25 + 19 cut |
 | 11 | Elicitation & subjective estimation | ✅ `11-elicitation-subjective-estimation.md` | 22 + 14 cut |
 | 12 | Model selection & information theory | ✅ `12-model-selection-information-theory.md` | 22 + 20 cut |
-| 13 | Monitoring, anomaly & changepoint | pending | — |
+| 13 | Monitoring, anomaly & changepoint | ✅ `13-monitoring-anomaly-changepoint.md` | 24 + 21 cut |
 
 ### 1.1 Design implication: prefer breakdown values to pass/fail assumption checks
 
@@ -737,3 +737,56 @@ Python would force approximations. At agent scale it does not.
 from ~6 subsample estimates with **no variance estimate at all**, and is valid in settings where the
 bootstrap provably is not. Given §1.27, this is the strongest new entrant in the sweep and a direct
 replacement for the role the bootstrap was going to play.
+
+### 1.31 The anomaly-detection benchmark literature is broken, which is licence to stay classical
+
+**Source:** territory 13. Under the standard point-adjust evaluation protocol, a **random-scoring
+detector achieves state-of-the-art F1** (Wu & Keogh; Kim et al., 2021–22).
+
+The practical consequence is liberating rather than depressing: reported gains from sophisticated
+learned anomaly detectors are substantially protocol artifacts, so there is **empirical licence to
+ship classical methods** — robust z-scores, CUSUM, EWMA, exact Poisson tails — without apologising for
+the absence of anything learned. This retires a worry that the pure-stdlib constraint was costing
+real capability in this family. It isn't.
+
+### 1.32 A false-alarm engine is worth more than another detector
+
+**Source:** territory 13. Two results that together argue for shipping an **average-run-length engine**
+as a first-class tool rather than as a helper.
+
+- **Siegmund's CUSUM ARL approximation** reproduces Montgomery's published table to within 1–4% in
+  *two lines of Python*. Threshold selection by declared false-alarm rate — rather than by round
+  numbers like "3 sigma" — is therefore trivially shippable. This directly retires a voodoo constant
+  the library would otherwise have had to invent.
+- **The Western Electric rules drop ARL₀ from 370 to 91.75** — four times more false alarms than the
+  base chart. Critically, that figure **cannot be obtained by adding the per-rule rates**: naive
+  addition gives 52, because the rules use overlapping windows and are not independent.
+
+The second is another composition hazard (§1.4, §1.6, §1.16): individually valid rules combined
+naively give an answer that is wrong by ~76%. It is also the cleanest argument in the sweep for a
+Monte Carlo engine — the exact answer is analytically awkward and trivially simulable.
+
+**Action:** ship `average_run_length` as a first-class model. Every monitoring tool that asks for a
+threshold takes a target false-alarm rate instead and derives the threshold, rather than accepting a
+sigma multiplier.
+
+### 1.33 Convergence on the agent's actual daily questions
+
+Territory 13's top five are unusually concrete, and three of them are the situations that motivated
+this project in the first place:
+
+- **Benchmark regression verdict** — a CI on the *difference* against a **declared minimum-interesting
+  effect**, rather than a significance test. Requiring the agent to state what size of regression
+  would matter *before* computing is itself the guard against p-value theatre.
+- **Flaky-or-unlucky** — Clopper–Pearson on the failure rate, the rule of three, and reruns-to-confidence.
+  Third independent appearance of the `n ≥ ln(α)/ln(p)` identity (§1.15, §1.22), now from a completely
+  different direction.
+- **Exact Poisson rate check** for the 0/1/2-event case (Garwood CI plus exact tail).
+
+Also note the **robust anomaly score ships with an IQR fallback for when MAD = 0** — territory 13
+independently hit and solved the degenerate-MAD problem territory 04 flagged in §1.29. Two territories
+converging on the same failure *and* the same fix is worth more than either alone, with the §1.16
+caveat still applying.
+
+Numerics requirement confirms §1.12 unchanged: regularized incomplete beta (t quantiles) and
+incomplete gamma (χ² tails). Nothing else.
