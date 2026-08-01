@@ -1215,3 +1215,94 @@ re-run dedup pass, which will collapse several into shared engines):
 Note that (1) and (3) require **no statistics the baselines got wrong** — they encode facts an agent
 has no way to know it doesn't know. That matches the baseline evidence (`evals/baselines/RESULTS.md`)
 better than most of the catalogue does.
+
+### 3.14 CLAIM VERIFICATION — four findings refuted
+
+**Source:** review 02, which verified by independent derivation and simulation rather than by seeking
+agreement. This is the pass that justifies §1.16's caveat: several convergent-looking findings were
+wrong, and none of the other four reviews caught any of them.
+
+#### REFUTED 1 — §1.32 Western Electric "wrong by ~76%"
+
+Measured per-rule ARL₀ alone: **369 / 510 / 291 / 256**. Harmonic combination `1/Σ(1/ARLᵢ)` gives
+**83.3** against a true **91.6** — a **9% error, not 76%.**
+
+The 52 figure came from territory 13's own per-rule table, which was computed from *marginal
+per-point probabilities*. Rule 4's ARL was quoted as 128; the true expected waiting time for a run of
+8 on one side is `2⁸ − 1 = 255` (verified by simulation). Champ & Woodall's published rows are
+"rule 1 + rule k" *schemes* — reproduced exactly at 224.9 / 166.0 / 152.8 — so combining those
+triple-counts rule 1.
+
+**This was the flagship composition hazard behind §1.32, §2.3, and principle P5, and its magnitude is
+wrong by roughly 8×.** The conclusion survives — you still cannot add ARLs, and a Monte Carlo engine
+is still the right answer — but on far less dramatic grounds than claimed. The corrected figure
+(370 → 91.6 for the combined scheme) was itself **verified**: MC gives 91.62.
+
+#### REFUTED 2 — §1.8 "N ≈ 11–25 resolved predictions"
+
+Territory 07 used a **normal approximation**. Exact binomial requires **19 / 25 / 33** for gaps of
+0.30 / 0.25 / 0.20 two-sided — understating by 39–71% precisely where the headline sits.
+
+Two further errors compound it: the claim conflates ECE with the *signed* gap, and it contradicts
+§1.9 — since N is **per confidence bucket** and LLM confidence concentrates on 6–8 distinct values,
+the total prediction count needed is **6–8× larger**. "One long session" was wrong; this is
+120–260 logged predictions.
+
+I reported this to the user as a headline finding promoting calibration to Wave 1. **That promotion
+is withdrawn.** It also independently confirms review 04's separate conclusion (§3.5) that the
+calibration family's real deliverable is a *logging protocol*, not statistics.
+
+#### REFUTED 3 — §1.29 "at n=10 a Cauchy sample cannot look heavier-tailed than a normal one"
+
+Kurtosis achieves **AUC 0.867, power 0.601 at 5% FPR** — it discriminates perfectly usefully. The
+proposed replacement `max|x|/Σ|x|` is better (0.903 / 0.685) but not by the margin claimed.
+
+The error is methodological and instructive: territory 04 **compared medians for the statistic it
+preferred and maxima for the one it rejected.** Its measured numbers were real; the comparison was
+apples to oranges. This is the same territory I singled out for measuring rather than estimating —
+measurement is necessary and not sufficient.
+
+The bound is also `n − 2 + 1/(n−1)`, not "≈ n−1" — 11% off at n = 10, and the report's own quoted
+8.11 *is* the exact bound.
+
+#### REFUTED 4 — cluster C1 is 4-of-6, not 5-of-5
+
+Rule of three, **one-sided** Wilks, the quantile bound, and reruns-to-confidence all genuinely reduce
+to `n ≥ ln α / ln p`. The MTBF bound is the continuum limit (it solves for a rate). But the
+**two-sided Wilks tolerance interval is transcendental** and does not reduce to that form: one-sided
+95/95 is n = 59 and 95/99 is n = 299, whereas §1.29 quotes 93 — a number that cannot come from the
+claimed formula.
+
+**"One implementation backing both is the bug the brief anticipated."** This lands directly on the
+engines-not-models reshape (§3.4): cluster unification must be **verified per member**, not asserted
+from resemblance. Every one of the ~18 clusters now requires the same treatment C1 just failed.
+
+#### Verified and standing
+
+All six §1.29 arithmetic floors (by enumeration and MC) · AIC/BIC crossover at `e²` · bootstrap
+coverage (0.750 / 0.770 / 0.885 measured vs 0.731 / 0.753 / 0.889 claimed; n=10 matches to 3 dp) ·
+median-bootstrap degeneracy (**proved**, not simulated) · ARL₀ 370 → 91.6 · **Vovk–Wang proved valid
+*and tight*** by LP over all couplings · §1.37 PERT (symbolic residual exactly zero) · §1.31 ·
+§1.13 MI bias.
+
+#### Two standing claims that need qualification
+
+- **§1.18 `f^√k`** holds **only under independence.** At ρ = 0.3 the four-factor spread is **20.6×,
+  not 9×.** It was nominated as a verbatim SKILL.md headline; it cannot ship without the independence
+  condition attached, and agent-estimated factors are rarely independent.
+- **§1.24 Kelly**: the affine-in-p theorem verifies, but **the simulation territory 10 cited in its
+  support (σ=20% moving f\* from 0.40 to 0.36) contradicts it** — under the theorem f\* should not
+  move at all. One of the two is measuring something other than probability uncertainty. Unresolved;
+  do not ship either until reconciled.
+
+### 3.15 What the verification pass implies about the sweep
+
+Four refutations, none caught by the other four reviews, all in findings that *looked* solid — two of
+which I had already reported as headlines. The pattern is consistent: **the errors are in the
+attention-grabbing magnitudes, not in the underlying direction.** Every refuted claim had a correct
+conclusion attached to a wrong number.
+
+That is the failure mode a library of statistical tools would itself induce in an agent, which makes
+it worth stating as a rule: **no number from this sweep enters SKILL.md, a model header, or a golden
+test until it has been independently re-derived.** The research log is a source of hypotheses and
+citations. It is not a source of constants.
