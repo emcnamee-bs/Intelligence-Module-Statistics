@@ -167,7 +167,7 @@ reference values**, not against SciPy output, and each function must declare its
 4. Minor but binding: skill `name` cannot contain "claude"/"anthropic"; family reference files link
    directly from SKILL.md (one level) and each opens with a TOC.
 
-### 0.9 Sources
+### 0.9 Sources (Part 0)
 
 - [Skill authoring best practices — Claude Docs](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices)
 - [Agent Skills overview — Claude Docs](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview)
@@ -184,3 +184,295 @@ reference values**, not against SciPy output, and each function must declare its
 - [ASA063 — incomplete beta](https://people.math.sc.edu/Burkardt/py_src/asa063/asa063.html)
 - [ASA032 — incomplete gamma](https://people.math.sc.edu/Burkardt/c_src/asa032/asa032.html)
 - [Gamma functions in Python — John D. Cook](https://www.johndcook.com/blog/gamma_python/)
+
+---
+
+## Part 1 — Territory sweep (13 parallel reports)
+
+Full reports live in `research/territories/`. This section records only **cross-cutting findings that
+change the design**; per-model detail stays in the territory files.
+
+### Status
+
+| # | Territory | Report | Models |
+|---|---|---|---|
+| 01 | Bayesian inference & decision theory | pending | — |
+| 02 | Causal inference | ✅ `02-causal-inference.md` | 24 + 15 cut |
+| 03 | Forecasting & time series | pending | — |
+| 04 | Robust & nonparametric | pending | — |
+| 05 | Extreme value & tail risk | ✅ `05-extreme-value-tail-risk.md` | 24 + 20 cut |
+| 06 | Sequential design & stopping | ✅ `06-sequential-design-stopping.md` | 25 + 15 cut |
+| 07 | Calibration & forecast scoring | ✅ `07-calibration-forecast-scoring.md` | 23 + 22 cut |
+| 08 | Evidence synthesis & aggregation | pending | — |
+| 09 | Reliability, survival & duration | ✅ `09-reliability-survival-duration.md` | 23 + 22 cut |
+| 10 | Decision, bandits & value of information | pending | — |
+| 11 | Elicitation & subjective estimation | pending | — |
+| 12 | Model selection & information theory | ✅ `12-model-selection-information-theory.md` | 22 + 20 cut |
+| 13 | Monitoring, anomaly & changepoint | pending | — |
+
+### 1.1 Design implication: prefer breakdown values to pass/fail assumption checks
+
+**Source:** territory 02. Roth (2022) shows the pre-trend test an analyst would naturally reach for is
+underpowered enough that **conditioning on having passed it makes bias worse**. Screening on a
+low-power assumption test is not a neutral filter — it selects for datasets where the violation
+happened to be invisible.
+
+This generalizes well beyond difference-in-differences, and it refines the refusal semantics in
+§8 of the spec. The three-level OK / CAVEAT / REFUSED ladder is still right for *structural*
+violations — inputs that are inconsistent, degenerate, or outside a function's domain. But for
+*assumption* violations that are matters of degree, a binary check is the wrong instrument. Those
+should instead report a **breakdown value**: how strong would the violation have to be to overturn
+the conclusion?
+
+Concretely, the E-value answers "how strong would unmeasured confounding have to be to explain away
+this effect" in a single number computable from three inputs. That is far more useful to an agent
+than "assumption check: passed."
+
+**Action:** §8 gains a fourth output mode alongside OK / CAVEAT / REFUSED — models whose assumptions
+are matters of degree emit a `ROBUSTNESS:` line quantifying what it would take to overturn the
+result, rather than asserting the assumption holds. Where a breakdown value is computable, it is
+preferred to an assumption test. To be folded into the spec before Wave 0.
+
+### 1.2 Design implication: some naive answers are wrong, not merely imprecise
+
+**Source:** territory 02. Two-way fixed effects with staggered treatment timing can return an estimate
+**outside the convex hull of every unit's true effect, including the wrong sign**, because it
+silently uses already-treated units as controls (Goodman-Bacon; Callaway–Sant'Anna; Sun–Abraham).
+
+Most of this library's value proposition is "the model is more precise than intuition." This is a
+different and stronger category: cases where the obvious approach is *actively misleading*. Those
+models deserve priority in Wave 1 regardless of how often the situation arises, and the registry
+should mark them so the router can surface the warning even on a weak match.
+
+**Action:** add a `naive_answer_is_wrong: true` flag to the registry schema for models in this class.
+
+### 1.3 Ranking inversion worth noting
+
+Territory 02 ranks **sensitivity analysis and bounds above every estimator**, on the grounds that the
+agent's modal input is "an effect size and a story," not a panel dataset. Two of its top five require
+*no data at all*: the back-door criterion with good/bad-control classification is pure graph
+algorithms over a stated causal structure.
+
+This is evidence the INLINE tier is richer than assumed at design time, and that "no data" does not
+mean "no rigorous answer available." Watch whether other territories replicate the inversion.
+
+### 1.4 Cross-territory hazard logged
+
+Using a **detected** changepoint as the intervention date in an interrupted time series invalidates
+the inference — the date must be specified a priori. This couples territory 13 (changepoint
+detection) to territory 02 (ITS), and is exactly the kind of composition error an agent chaining two
+tools would make. Candidate for an explicit warning in both models' output.
+
+### 1.5 Design implication: the modern methods are the cheap ones
+
+**Source:** territory 06. The single most useful finding of the sweep so far.
+
+I assumed the pure-stdlib constraint would push us toward classical, textbook methods and away from
+recent literature. **The opposite is true in this territory.** Anytime-valid inference — betting
+confidence sequences, empirical-Bernstein confidence sequences, the Wang–Ramdas anytime-valid t-test
+— needs only `log`, `exp`, `sqrt` and running plug-in estimators. No incomplete beta, no noncentral
+t, no multivariate-normal orthant integration.
+
+The hard numerics in this territory are all in the *classical* rows: exact t-test power, group
+sequential boundaries via alpha spending. So the methods that are **better suited to an agent** (stop
+as soon as convinced, peek as often as you like, no pre-committed sample size) are also the
+**cheapest to implement and the easiest to test**.
+
+**Action:** Wave 1 leads with the anytime-valid family rather than treating it as advanced material.
+Reconsider whether classical power analysis is even worth shipping beyond the sample-size planning
+case, given it is both harder to implement and answers a question the agent rarely gets to ask
+(agents almost never get to fix n in advance).
+
+This also weakens the §9 dependency between models and `lib/special.py`: if the flagship
+evidence-sufficiency tools need no special functions at all, the highest-risk component of the
+project is less load-bearing than the design assumed.
+
+### 1.6 Design implication: two hard REFUSEs identified
+
+**Source:** territory 06. Both are cases where an agent's *default workflow* is the failure mode.
+
+1. **Post-hoc power** — computing achieved power from the observed effect. It is a deterministic
+   function of the p-value and carries no information; it reliably misleads. Hard refuse.
+2. **Fisher's method (and friends) for pooling adaptively-run studies.** "Decide whether to run study
+   k+1 based on how study k came out" is *exactly* the agent's natural behavior, and it breaks every
+   classical pooling method. The fix is e-value products, which remain valid under adaptive stopping.
+
+(2) matters beyond this territory: it is a **composition hazard** between the synthesis family
+(territory 08) and the evidence-sufficiency family. Any pooling model must ask whether the inputs
+were collected adaptively, and refuse if so, pointing at the e-value route instead. Logging alongside
+the ITS/changepoint hazard in §1.4 — a pattern is forming where the dangerous errors are in *chaining
+two tools*, not in either tool alone.
+
+**Action:** add a `composition_hazards` field to the registry schema, naming model ids that must not
+be chained into this one and why. The router prints these when it returns a match.
+
+### 1.7 Newly-published work worth tracking
+
+- Chugg & Ramdas, arXiv:2512.21300 — closed-form empirical-Bernstein confidence sequence, removes the
+  grid search from the prior construction.
+- Schultzberg, arXiv:2606.18366 — first closed-form sample-size correction for *planning* a sequential
+  design; 8–20% saving over the naive last-point rule.
+- Waudby-Smith & Ramdas 2024 — betting/hedged-capital confidence sequences for a bounded mean; the
+  flagship "can I stop now" tool.
+
+### 1.8 Design implication: self-calibration is practical, not aspirational
+
+**Source:** territory 07. Potentially the highest-value finding of the whole sweep.
+
+The received wisdom — imported from clinical prediction modelling — is that you need ~200 resolved
+events before saying anything about calibration. On that basis, an agent auditing its own confidence
+would need a prediction log it will never have, and the calibration family would be decorative.
+
+**That rule does not apply here.** It governs *flexible calibration curves* (isotonic, beta). For
+**calibration-in-the-large** — the single question "am I systematically overconfident, and by how
+much" — the arithmetic is completely different, for two reasons: binomial variance `p(1-p)` is small
+near p = 0.9 where agents actually make claims, and the effect being detected is enormous (published
+ECE for LLM verbalized confidence runs 0.17–0.57).
+
+Detecting the overconfidence gap **as it actually exists** needs:
+
+| Gap to detect | Resolved predictions needed (80% power) |
+|---|---|
+| The real, published gap | **N ≈ 11–25** |
+| 10 points | N ≈ 85 |
+| 5 points | N ≈ 315 |
+
+**An agent that has logged ~20 resolved predictions can legitimately measure and correct its own
+overconfidence.** That is within reach of a single long session, let alone a project. This promotes
+the calibration family from "nice if we ever get data" to a Wave 1 candidate.
+
+### 1.9 Design implication: LLM confidence is sparse, so bin nothing
+
+**Source:** territory 07. The entire ECE-binning controversy (bin count artifacts, boundary
+sensitivity, the well-known critiques of ECE as a metric) is **irrelevant to this use case**.
+
+LLM verbalized confidence is not continuous. It concentrates on 6–8 distinct values — the COLM 2026
+mechanistic paper observes {70, 75, 80, 85, 90, 99}. So the right operation is **grouping by exact
+stated value**, which is exact rather than approximate, has no tuning parameter, and sidesteps the
+entire literature. Fewer lines of code *and* more correct.
+
+Corollary: the CORP decomposition via pool-adjacent-violators gives a binning-free
+miscalibration/discrimination/uncertainty split in roughly 30 lines of stdlib, and should replace the
+classical Murphy decomposition as the default.
+
+### 1.10 Design implication: a calibration number alone is a lie
+
+**Source:** territory 07. Two refusal rules, both structural rather than degree-of-violation:
+
+1. **ECE = 0 is achievable by a constant forecaster that always predicts the base rate.** A
+   calibration statistic is therefore meaningless without a companion **skill-vs-base-rate score** and
+   a **sharpness/resolution** term. No model in this family may print a calibration number alone.
+   This is the "reliability without resolution is worthless" point, enforced in the output contract.
+2. **Recalibration gains must never be reported in-sample.** Fitting a recalibration map and then
+   scoring on the same data always shows improvement.
+
+Plus a **protocol precondition** that is stronger than a refusal-on-violation: per the 2026
+protocol-sensitivity paper, the *sign* of the calibration gap flips with elicitation context. A log
+assembled from mixed elicitation protocols, or reconstructed from recall, must be **refused
+outright** — no statistic repairs it. This is the first case in the sweep where the tool must
+interrogate *how the data was collected* before touching it, which suggests the registry needs a
+`data_provenance_required` marker.
+
+### 1.11 Pattern emerging across territories
+
+Three territories in, the dangerous failures are consistently **not** in choosing the wrong model.
+They are:
+
+- **Composition errors** — chaining two individually-valid tools invalidly (§1.4 changepoint→ITS,
+  §1.6 adaptive collection→pooling).
+- **Provenance errors** — running a valid model on data whose collection process breaks it (§1.10
+  mixed elicitation, §1.6 adaptive stopping).
+- **Incomplete reporting** — a technically correct number that misleads alone (§1.10 calibration
+  without resolution, §1.1 assumption checks without breakdown values).
+
+None of these are addressed by the current spec, which guards mainly against *bad inputs to a single
+model*. The registry schema additions now pending — `composition_hazards`, `data_provenance_required`,
+`naive_answer_is_wrong`, plus the `ROBUSTNESS:` output mode — all exist to close this gap. Worth
+consolidating into a spec revision once the sweep completes rather than patching it three more times.
+
+### 1.12 Architectural finding: the numerics core is far smaller than the spec assumed
+
+Four territories now independently report that the methods best suited to agent-scale problems need
+almost no special functions. This is the single biggest de-risking of the project so far, because
+`lib/special.py` was named as the top risk in the design spec (§13).
+
+| Territory | What it actually needs |
+|---|---|
+| 06 sequential | `log`, `exp`, `sqrt` + running estimators. The *classical* rows need the hard numerics; the modern anytime-valid rows need none |
+| 12 model selection | Only the regularized upper incomplete gamma (chi-square survival). 9 of 22 rows avoid even that via permutation / bootstrap / sample-splitting / e-values. ~80% ships on `log`, `lgamma`, `random.shuffle` |
+| 05 tail risk | Closed-form L-moment GPD (`ξ̂ = 2 − ℓ₁/ℓ₂`) *beats* MLE at agent sample sizes and needs no optimizer. The workhorse tail fit is EASY, not HARD |
+| 09 reliability | Regularized incomplete gamma + its inverse, `NormalDist`, `math.erfc`. The log-rank χ²₁ tail is closed-form as `erfc(√(x/2))` |
+
+**Convergent conclusion.** `lib/special.py` reduces to essentially two functions — regularized
+incomplete gamma (with inverse, for χ² quantiles) and regularized incomplete beta — rather than the
+broad special-function library the spec envisaged. Meanwhile `lib/resample.py` rises in importance:
+at agent-scale n, permutation and bootstrap buy *asymptotics-free validity* for CPU cycles that cost
+nothing.
+
+The reason is not a coincidence. Methods that are exact, distribution-free, or resampling-based are
+simultaneously (a) the right choice at small n, where asymptotic approximations fail, and (b) trivial
+to implement, because they replace analysis with computation. The pure-stdlib constraint and
+statistical correctness at agent scale point the same direction.
+
+**Action:** revise spec §9 and §13. Downgrade `lib/special.py` from top risk; promote
+`lib/resample.py` into the Wave 0 core (already there) and treat exactness-by-resampling as the
+library's default idiom rather than a fallback.
+
+### 1.13 Design implication: trust thresholds must scale with n
+
+**Sources:** territories 12, 05, 09. A hard-coded threshold is a voodoo constant in disguise when the
+quantity it guards is sample-size dependent.
+
+- **PSIS-LOO k̂** was revised in 2024 from a flat 0.7 to `min(1 − 1/log₁₀S, 0.7)` — explicitly
+  sample-size dependent (territory 12).
+- **Permutation tests**: with n₁ = n₂ = 3 the minimum achievable p is 0.10, so the test *cannot* reject
+  at α = 0.05. Not a caveat — an arithmetic impossibility (territory 12).
+- **Mutual information**: McAllester & Stratos (2020) proved no distribution-free lower bound on MI
+  from n samples can exceed `ln n`. A theorem-backed refusal rule, not a heuristic. Plug-in MI is also
+  biased *upward* by `(K_X−1)(K_Y−1)/2n`, so it is essentially never zero even for independent
+  variables (territory 12).
+- **Order statistics**: at n = 100 there is **no** upper confidence bound available on any quantile
+  above p97. A reported "p99 from 100 samples" is not a statistic (territory 05).
+- **AIC vs BIC**: the penalties cross at `n = e² ≈ 7.39`. Below n ≈ 7, **AIC penalizes complexity more
+  than BIC** — the universal "BIC is the conservative one" intuition inverts precisely in the small-n
+  regime agents live in (territory 12).
+
+**Action:** every threshold in the library is a documented function of n where the statistics say it
+should be, and the L1 test suite includes cases at the crossover points above.
+
+### 1.14 New refusal category: the question itself has no answer
+
+Distinct from refusing on bad inputs. Here the inputs are fine and the model is right — but the
+question as posed is malformed, and answering it at all would mislead.
+
+- **"When should I give up on this long-running process?"** has no threshold answer in general: the
+  optimal policy is determined by hazard shape, and under *decreasing* hazard it is degenerate —
+  never abandon, because every minute survived improves the outlook. The tool must say so. This
+  directly contradicts the agent's instinct to kill a long-running process (territory 09).
+- **Reliability-growth extrapolation**: the National Academies (2015) formally state they "do not
+  support the use of these models for such predictions." Crow-AMSAA forecasting becomes a hard
+  refusal, not a caveat (territory 09).
+- **Tail shape at agent scale**: arXiv:2606.16511 pre-registered a tail-shape protocol on LLM
+  evaluations and killed its own hypothesis — Δξ̂ = 0.28 at 2,000 prompts collapsed **30×** to 0.009 at
+  30,000. Detecting Δξ = 0.10 needs ~1,570 exceedances. External validation that ξ is a *sign*, not a
+  number, at our scale (territory 05).
+
+**Action:** §8 output contract gains a `NO ANSWER EXISTS` mode alongside OK / CAVEAT / ROBUSTNESS /
+REFUSED, which explains *why the question is unanswerable* and what decidable question to ask
+instead. This is arguably the highest-value thing the module can do for an agent's judgment, because
+it is the failure mode no amount of computation fixes.
+
+### 1.15 Consolidation candidates spotted
+
+Territory 05 reports that the rule of three, Wilks' 95/99 tolerance interval (n = 299), and "can I put
+an upper CI on p99" are **the same inequality**, `n ≥ ln(α)/ln(p)`. One ~40-line module answers a
+large fraction of tail questions exactly, with zero distributional assumptions.
+
+Territory 09 independently ranks the zero-failure bound (`p ≤ 3/n`, `MTBF ≥ T/3` at 95%) as the
+highest intuition-to-arithmetic gap in its territory — the same inequality again.
+
+This is the first strong signal that the registry will contain **duplicate mathematics under
+different names across families**, exactly as the cross-territory-overlap sections were meant to
+surface. Dedup pass required before the registry is written: one implementation, multiple registry
+entries pointing at it with family-specific `situations` phrasing. The router should route on the
+situation; the code should exist once.
