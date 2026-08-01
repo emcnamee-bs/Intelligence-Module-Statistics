@@ -24,7 +24,7 @@ the project's premise assumed, and it changes the value proposition. Read §Impl
 
 ---
 
-## S1 — Benchmark regression · 4/5
+## S1 — Benchmark regression · 3/4
 
 **What it computed, verbatim:** means 1.030 / 1.136, SDs 0.052 / 0.053, difference +0.106 s (10.3%),
 `t ≈ 3.17, df = 8, p ≈ 0.013`, 95% CI on the slowdown `[0.03s, 0.18s]`, plus a Mann–Whitney check at
@@ -44,18 +44,18 @@ measurement error (thermal throttling, ordering, cache state), and that "no amou
 these 10 numbers can detect that." That is a correct and non-obvious point which no model in the
 catalog would have made.
 
-## S2 — Flaky test · 4/4
+## S2 — Flaky test · 3/3
 
 **Verbatim:** "2/60 = 3.3%, Wilson 95% CI **[0.9%, 11.4%]**." Verified correct (Wilson centre 0.0614,
 half-width 0.0522). Gave ~300 clean runs for a <1% upper bound via the rule of three, and 400–800
 runs to distinguish 1% from 5%.
 
-All four REQUIRED met. **It then argued that more runs is the wrong instrument** — that two failure
+All three REQUIRED met. **It then argued that more runs is the wrong instrument** — that two failure
 artifacts beat 500 additional pass/fail bits, and that "statistics cannot answer that question." That
 is a correct value-of-information argument reached qualitatively, and it is the argument spec §5
 proposes to make numerically.
 
-## S3 — Zero events · 5/5
+## S3 — Zero events · 3/3
 
 Applied the rule of three correctly (`3/200` → 98.5% lower bound at day granularity) and computed
 that 99.9% at day granularity needs ~3,000 incident-free days ≈ 8.2 years. Verified correct.
@@ -81,7 +81,7 @@ lowest observation.
 estimate with an interval — which is *worse* than what the baseline did, because pooling presumes the
 three numbers estimate one quantity, and the baseline's central insight is that they do not.
 
-## S5 — Duration estimate · 4/5 — **the one real arithmetic failure**
+## S5 — Duration estimate · 3/4 — **the one real arithmetic failure**
 
 **Verbatim:** "Expected: (3 + 4×6 + 20)/6 = ~7.8 weeks · Std dev: **(20−3)/6 = ~2.8 weeks** · P80 ≈
 10.2, P90 ≈ 11.5"
@@ -102,14 +102,14 @@ Everything else passed: it flagged that the mean (7.8) exceeds the mode (6), com
 than P50, gave the skew a causal reading, and proposed a diverse pilot cohort to convert elicited
 estimates into measured throughput.
 
-## S7 — Value of information · 5/5
+## S7 — Value of information · 3/3
 
 **Verbatim:** "picking blind costs 0.30 × 10 days = 3 expected days of rework. The benchmark costs 2
 days guaranteed. Benchmark wins by a day." Then refined it with detection reliability: "0.30 × 0.85 ×
 10 = 2.55 days saved against 2 days spent," minus a false-positive branch, netting "between slightly
 positive and zero."
 
-All five REQUIRED met. It then made a move the target model cannot: observing that when EV is near
+All three REQUIRED met. It then made a move the target model cannot: observing that when EV is near
 break-even the EV calculation should not decide, and that the cheaper play is to **buy an option
 rather than information** — put the library behind a seam so rework costs 1 day instead of 10,
 collapsing expected loss to 0.3 days.
