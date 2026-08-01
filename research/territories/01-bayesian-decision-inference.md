@@ -21,25 +21,26 @@ Appendix B: [Numerics inventory](#appendix-b--numerics-inventory-what-the-territ
 
 ## 1. Territory summary
 
-This territory is the only one in the library that answers an agent's actual question. Every
-other statistical tradition answers "would this data be surprising if nothing were going on";
-an agent asking *is this difference real*, *should I run one more test*, *which option do I
-pick* needs a probability over the world and a decision rule, and only Bayes supplies both in
-one object. Its second property matters more for agents than for scientists: **it degrades
-gracefully to n = 0**. A conjugate posterior at n = 3 is not a broken t-test — it is a wide,
-honest, correctly-shaped distribution, whereas the frequentist machinery either refuses,
-emits a nonsense interval, or (worse) emits a plausible-looking one. Third, it converts the
-agent's own prose beliefs into a legitimate input: an LLM writing "I'd guess around 20%,
-surprised above 40%" is doing prior elicitation, and there is now peer-reviewed evidence that
-LLM-elicited priors beat both uninformative defaults and in-context learning at low n
-([AutoElicit](https://arxiv.org/abs/2411.17284)). Fourth, the territory carries its own
-falsifier — prior sensitivity analysis — which is precisely the "refuse to print a number"
-mechanism the project's doctrine demands, because the honest answer to most sparse-data
-questions is *your prior is doing the work*. Fifth and least obviously, almost all of it is
-**closed form or one-dimensional quadrature**, so the stdlib constraint costs far less here
-than it would in a regression- or ML-flavoured territory: the pure-Python tax is paid mostly
-in the two special functions (regularized incomplete beta and gamma) that the project has
-already scoped.
+**One.** This territory is the only one in the library that answers the agent's actual
+question — every other statistical tradition answers "would this data be surprising if nothing
+were going on", whereas *is this difference real*, *should I run one more test*, *which option
+do I pick* each require a probability over the world **and** a decision rule, and only Bayes
+supplies both in one object. **Two.** It degrades gracefully to n = 0: a conjugate posterior at
+n = 3 is not a broken t-test but a wide, honest, correctly-shaped distribution, where the
+frequentist machinery either refuses, emits a nonsense interval, or — worse — emits a
+plausible-looking one. **Three.** It converts the agent's own prose beliefs into a legitimate
+input, and an LLM writing "I'd guess around 20%, surprised above 40%" is doing prior
+elicitation, a technique with peer-reviewed evidence that LLM-elicited priors beat both
+uninformative defaults and in-context learning at low n
+([AutoElicit](https://arxiv.org/abs/2411.17284)). **Four.** The territory carries its own
+falsifier — prior sensitivity analysis, whose best output is a *breakdown point* ("this
+conclusion survives four adversarial pseudo-observations") — which is precisely the
+refuse-to-print mechanism the project's doctrine demands, because the honest answer to most
+sparse-data questions is *your prior is doing the work*. **Five.** Almost all of it is closed
+form or one-dimensional quadrature at the dimensionality an agent operates in, so the stdlib
+constraint costs far less here than in a regression- or ML-flavoured territory: the pure-Python
+tax is paid mostly in the two special functions (regularized incomplete beta and gamma) the
+project has already scoped.
 
 The territory's characteristic failure — the thing the tool must police — is that a Bayesian
 answer *always* returns a number. There is no `p > 0.05` to hide behind. A posterior computed
@@ -51,6 +52,7 @@ of this answer came from the data", and every row below carries that obligation.
 
 ## 2. Ranked model table
 
+25 agent-facing rows plus one infrastructure row (26, SBC — the library's own correctness test).
 Ranking weights: (frequency an agent hits the predicament) × (margin over unaided guessing) ×
 (stdlib feasibility) × (robustness of the answer at genuinely small n).
 
@@ -100,7 +102,7 @@ file the agent already has. **MUST-CONSTRUCT-DATA** = the agent has to go genera
 | 20 | **Bayesian bootstrap (Rubin) and the loss-likelihood / posterior bootstrap** | "credible interval on the median" · "uncertainty on a weird statistic with no formula" · "I don't want to assume a distribution" · "nonparametric uncertainty from a small sample" · "interval on the 90th percentile" · "posterior on something defined by a cost, not a likelihood" | `--data <file> --statistic median\|p90\|trimmed-mean\|<loss expr>` [`--centering <parametric model> --pseudo-obs T`]. **DATAFILE** | A normal approximation on a statistic with no tractable sampling distribution, and the habit of reporting the sample median as a point fact. Also beats the classical bootstrap decisively at tiny n: **at n=3 Efron's bootstrap has only 10 distinct resamples and returns a degenerate all-identical replicate with probability 3/27**; Dirichlet weights are continuous and never degenerate. Its modern form is stronger still — Lyddon–Holmes–Walker showed the weighted-likelihood bootstrap is **exact, not approximate**, and extends to **arbitrary loss functions**, so `θ̂_b = argmin Σwᵢℓ(θ,yᵢ)` is a genuine posterior draw for a loss-defined parameter with **no likelihood specified at all** | **EASY, and arguably the best small-data/stdlib fit in the territory.** `random.expovariate(1.0)` × n, normalise, compute the weighted statistic, repeat 2,000×. Closed form for weighted mean/quantile/slope; general losses need a 1-D or 2-D golden-section or Nelder–Mead (~30 lines). Instant at n=3 | **Support limitation:** zero mass outside the observed values, so tail quantiles are hard-capped by the sample max — refuse any quantile beyond about `1 − 1/(2n)`. **The fix, and it is exactly the n=3 fix:** the *posterior bootstrap* (Fong, Lyddon & Holmes) appends `T′` pseudo-observations drawn from a parametric centering model before weighting, letting a DP concentration parameter blend prior information in continuously · heavy tails where the sample max is nowhere near the population tail · non-iid / clustered data (needs a block version) |
 | 21 | **PSIS-LOO / WAIC predictive model comparison** | "which of these explanations should I believe?" · "is the more complex model actually better?" · "compare two candidate models fairly" · "am I overfitting with this extra term?" · "which model predicts better out of sample" | Pointwise log-likelihood matrix from posterior draws (S × n) for each model. **DATAFILE** | In-sample fit (always favours complexity), parameter counting, and Bayes factors (which answer "which model is *true*" — the wrong question when both are wrong). Crucially reports `elpd_diff` **with its standard error**, which is what stops the agent declaring a winner on a 0.4-nat difference | **MODERATE.** Sort the ratios, take `M = floor(min(0.2S, 3√S))` from the tail, fit a generalised Pareto by the **Zhang–Stephens empirical-Bayes profile estimator** (~40 lines of `log`/`sqrt`, no optimiser, no matrices), replace the tail by GPD order-statistic quantiles truncated at the largest raw ratio. All stdlib | **k̂ above `min(1 − 1/log₁₀(S), 0.7)` → refuse.** Note the small-S trap: at S=1000 the real threshold is **0.67**, at S=100 it is **0.5** — the folklore "0.7 always" is too lenient exactly where this library operates ([Vehtari et al.](https://jmlr.org/papers/v25/19-556.html)) · **at very small n most points are influential, so expect widespread k̂ failure — the correct response is not to refuse but to fall back to exact LOO, refitting n times, which is trivial when n = 8** · n < ~20 makes the `elpd_diff` SE uninformative · `\|elpd_diff\| < 4` **or** `< 2·SE` → print "cannot distinguish; prefer the simpler model" and suppress the ranking (failure mode 4 from the `bayesian-workflow` eval) · models fitted to different data or transformations of y |
 | 22 | **Laplace approximation + marginal likelihood** | "fast approximate posterior for a small model" · "estimate the model evidence" · "I need this to be quick and the posterior looks bell-shaped" · "approximate Bayes without sampling" | A log-posterior + a starting point. **DATAFILE** | BIC — which is Laplace with a crude Hessian and an n→∞ assumption that fails at exactly the sample sizes this territory serves. Also 100–1000× faster than MCMC when it applies | **MODERATE.** Mode by Nelder–Mead (stdlib, ~60 lines); Hessian by central finite differences; `log Z ≈ logpost(θ̂) + (d/2)log2π − ½log\|H\|`. Determinant of a ≤6×6 matrix by Gaussian elimination with partial pivoting — trivial and numerically fine at this size | Skewed or bounded posteriors (variance parameters near zero, rates near 0 or 1) — **the dominant sparse-data case**, so this row must self-check against a grid or a few hundred MCMC draws and refuse when the discrepancy is large · multimodality · mode on a boundary (Hessian not negative-definite) · n small enough that the posterior is visibly non-Gaussian |
-| 23 | **Thompson sampling / posterior-sampling action rule** | "which option should I try next, given I'll learn from the result?" · "explore or exploit?" · "I have several candidates and limited attempts" · "keep testing the promising ones without abandoning the others" · "adaptive allocation across variants" | Per-arm posteriors (rows 1/5) + the number of remaining pulls. **INLINE, updated online** | ε-greedy (wastes a fixed fraction on known-bad arms) and greedy pick-the-best-so-far (locks onto an early lucky arm and never recovers — the dominant failure when each arm has 3 observations). One posterior draw per arm, argmax; near-optimal regret ([Agrawal & Goyal](https://arxiv.org/abs/1111.1797)) | **EASY.** One `random.betavariate` / `gammavariate` per arm per round | **Not a one-shot decision rule.** If there is no future learning, TS is strictly worse than row 4's Bayes action — route accordingly; this is the most likely misuse · non-stationary rewards (needs discounting) · delayed feedback · arms with very different costs (needs a budget-aware variant) |
+| 23 | **Thompson sampling / posterior-sampling action rule** | "which option should I try next, given I'll learn from the result?" · "explore or exploit?" · "I have several candidates and limited attempts" · "keep testing the promising ones without abandoning the others" · "adaptive allocation across variants" | Per-arm posteriors (rows 1/5) + the number of remaining pulls. **INLINE, updated online** | ε-greedy (wastes a fixed fraction on known-bad arms) and greedy pick-the-best-so-far (locks onto an early lucky arm and never recovers — the dominant failure when each arm has 3 observations). One posterior draw per arm, argmax; simultaneously optimal problem-dependent `(1+ε)Σᵢ(ln T)/Δᵢ` and near-optimal problem-independent `O(√(NT ln T))` regret ([Agrawal & Goyal](https://arxiv.org/abs/1209.3353)) | **EASY.** One `random.betavariate` / `gammavariate` per arm per round | **Not a one-shot decision rule.** If there is no future learning, TS is strictly worse than row 4's Bayes action — route accordingly; this is the most likely misuse · non-stationary rewards (needs discounting) · delayed feedback · arms with very different costs (needs a budget-aware variant) |
 | 24 | **Posterior predictive check / Bayesian surprise for anomaly** | "is this observation an anomaly?" · "does my model still fit?" · "this value looks weird — is it?" · "how surprising is this given what I knew?" · "did something change?" | A fitted model's posterior draws + the new observation(s). **DATAFILE** | A z-score against the sample mean and sd, which at small n is dominated by the candidate outlier itself. The posterior predictive tail probability accounts for parameter uncertainty, so a point that is 3 sd out at n=6 is often unremarkable | **EASY** given predictive draws (rows 7, 13, 14) | **Do not call it a p-value.** Posterior predictive p-values are conservative and non-uniform under the null (Bayarri & Berger); use the *partial* posterior predictive, or simply report the predictive quantile and refuse the significance framing · the candidate point was included in the fit (double use of data — must use the leave-one-out predictive, which rows 21's PSIS gives cheaply) · n < 5, where nothing is detectable |
 | 25 | **Bayesian stacking / model averaging of predictive distributions** | "several explanations are plausible — do I have to pick one?" · "combine competing models" · "hedge across model uncertainty" · "which mixture of these hypotheses" | LOO pointwise log-lik for 2–5 models (row 21's output). **DATAFILE** | Selecting the single best model and reasoning as if it were true — which understates predictive uncertainty in exactly the sparse regime where model choice is least certain. **BMA by marginal likelihood degenerates to a point mass on the single closest model as n grows even when that model is wrong**, and inherits the marginal likelihood's prior sensitivity. Stacking dominates under M-open, which is always the agent's setting ([Yao et al. 2018](https://arxiv.org/abs/1704.02030)) | **EASY — easier than expected.** The objective `max_w Σᵢ log Σₖ wₖ·p(yᵢ\|y₋ᵢ,Mₖ)` is concave on the simplex and has the same form as EM for mixture weights, so the fixed point `wₖ ← wₖ·(1/n)Σᵢ pᵢₖ/(Σⱼwⱼpᵢⱼ)` converges monotonically with **no gradient, no simplex projection, ~15 lines**. `pseudo-BMA+` (AIC-type weights stabilised by a Bayesian bootstrap over the pointwise elpd values) is the cheap fallback | Inherits every row-21 refusal (bad k̂, tiny n) · fewer than 2 genuinely distinct models · models fitted on different data · the agent wanting an interpretable "which one is right" answer — stacking deliberately does not provide one |
 | 26 | **Simulation-based calibration (SBC)** — self-test, not an agent-facing model | "is this tool itself correct?" · "validate the sampler" · "are my credible intervals actually covering?" | The model's prior sampler + likelihood sampler + inference routine. **MUST-CONSTRUCT-DATA (synthetic)** | Unit tests on point estimates, which cannot detect a systematically over-narrow posterior, and R̂, which detects non-convergence but never a *correct-looking but wrong* posterior (miscoded likelihood, dropped normalising constant). Rank of the true θ among posterior draws is Discrete-Uniform(0,L) **iff** inference is correct; deviation shapes are diagnostic — ∪-shaped = overconfident, ∩-shaped = too wide, sloped = biased | **EASY.** Sample θ from prior, simulate data, refit, rank; repeat ~500×; test uniformity. Simultaneous ECDF bands can be obtained exactly by simulating the null (M sets of L uniform ranks) — no asymptotics needed. A CI job, not a request-time call | **The blind spot that matters (Modrák et al. 2023): rank-based SBC on parameters alone cannot detect a sampler that ignores the data — if the posterior equals the prior, classic SBC passes perfectly.** The library's SBC harness must therefore include **data-dependent test quantities**, with the joint log-likelihood of the data being the single most useful one · unthinned autocorrelated draws break the uniformity claim · not applicable at request time |
@@ -122,47 +124,73 @@ All of it is sorting and arithmetic — fully stdlib.
 <https://arxiv.org/abs/1903.08008>
 
 **2. Pareto-smoothed importance sampling and its 2024 threshold revision (Vehtari, Simpson,
-Gelman, Yao, Gabry).** PSIS turns importance sampling from a technique that fails invisibly
-into one with a **self-diagnosing reliability statistic**, k̂. The revised paper replaces the
-fixed 0.7 cut with the sample-size-aware `min(1 − 1/log10(S), 0.7)`. This is the single most
-useful import into this territory: it makes cheap posterior reweighting — for LOO (row 21),
-for power-scaling prior sensitivity (row 6), for "what if I drop this point" — safe to
-automate, because the tool knows when to refuse. The generalised-Pareto fit uses a
-closed-form profile estimator; no optimiser needed.
-<https://arxiv.org/abs/1507.02646> · LOO application: <https://arxiv.org/abs/1507.04544>
+Gelman, Yao, Gabry, JMLR 25:72).** PSIS turns importance sampling from a technique that fails
+invisibly into one with a **self-diagnosing reliability statistic**, k̂. The 2024 paper replaces
+the fixed 0.7 cut with the sample-size-aware `min(1 − 1/log₁₀(S), 0.7)`, together with the
+minimum sample size `10^{1/(1−k̂)}` and the approximate ESS `S/10^{k̂/(1−k̂)}`. **The correction
+matters most at exactly this library's scale:** at S = 1,000 draws the real threshold is 0.67,
+at S = 100 it is 0.5 — the folklore "0.7 always" is too lenient. Algorithmically it is a sort,
+`M = floor(min(0.2S, 3√S))` tail points, a Zhang–Stephens generalised-Pareto fit (closed-form
+profile estimator, no optimiser), and reweighting. This makes cheap posterior reweighting — LOO
+(row 21), power-scaling (row 6), leave-one-out influence — safe to automate, because the tool
+knows when to refuse.
+<https://jmlr.org/papers/v25/19-556.html> · <https://arxiv.org/abs/1507.02646> · LOO
+application: <https://arxiv.org/abs/1507.04544>
 
 **3. Power-scaling prior sensitivity analysis (Kallioinen, Paananen, Bürkner, Vehtari, 2023).**
-Prior sensitivity used to mean refitting the model under a handful of priors — expensive and
-arbitrary. Power-scaling raises the prior to a power α and importance-reweights the *existing*
-draws, giving a continuous sensitivity gradient (cumulative Jensen–Shannon distance against
-log₂α) that separates **prior-data conflict** from **prior dominance**. It costs one pass over
-the draws and is guarded by k̂. This is the operational form of the project's "suppress the
-number when it isn't earned" doctrine.
-<https://arxiv.org/abs/2107.14054>
+Prior sensitivity used to mean refitting under a handful of priors — expensive and arbitrary.
+Power-scaling raises the prior (or likelihood) to a power α and reweights the *existing* draws
+by `p(θ)^{α−1}`, giving a continuous sensitivity gradient measured as the derivative of a
+normalised **cumulative** Jensen–Shannon distance with respect to log₂α. Two details make it
+unusually stdlib-friendly: CJS compares **CDFs, not densities**, so it is sorting rather than
+density estimation; and power-scaled exponential-family priors are analytic
+(`normal(μ,σ)^α ∝ normal(μ, α^{−1/2}σ)`, `beta(s₁,s₂)^α ∝ beta(αs₁−α+1, αs₂−α+1)`, …). Its real
+contribution is the **2×2 diagnosis** at threshold 0.05 — prior-sensitive *and*
+likelihood-sensitive = prior–data conflict; prior-only = weak likelihood; likelihood-only =
+healthy; neither = a computation problem — which is a far more actionable output than a
+sensitivity number. This is the operational form of the project's "suppress the number when it
+isn't earned" doctrine.
+<https://arxiv.org/abs/2107.14054> · <https://n-kall.github.io/priorsense/>
 
 **4. Penalised-complexity priors (Simpson, Rue, Riebler, Martins, Sørbye, 2017).** A principled
-recipe for default priors on "flexibility" parameters — group-level SDs, degrees of freedom,
-overdispersion — derived by putting an exponential penalty on the KL distance from a simpler
-base model. It gives *defensible* defaults where the library would otherwise be inventing
-voodoo constants, and it is exactly what row 9 needs for its τ prior when J is small. The
-resulting priors are typically exponential on a scale parameter — trivial to evaluate.
+recipe for default priors on "flexibility" parameters, derived by putting an exponential penalty
+on `d(ξ) = √(2·KLD(f₁‖f₀))`, the distance from a simpler base model. Two concrete payoffs for
+this library. (a) **For a group-level SD the PC prior is exactly `σ ~ Exponential(λ)`**, with λ
+fixed by one interpretable user statement `P(σ > U) = α ⇒ λ = −ln(α)/U`. That is a defensible
+default where the library would otherwise be inventing a voodoo constant, and it is one line of
+`random.expovariate`. (b) It supplies the *theoretical* reason to reject `Γ(ε,ε)` on precision:
+any Γ(a,b) has zero density at the base model, so it structurally cannot shrink to
+"no heterogeneity" — it overfits by construction. (Aside: swapping the exponential for a
+half-Cauchy on `d` recovers the horseshoe prior.)
 <https://arxiv.org/abs/1403.4630>
 
-**5. Safe testing, e-values, and anytime-valid inference (Grünwald, de Heide, Koolen, 2019→;
-Ramdas et al.).** E-values give an evidence measure that is valid **under arbitrary optional
-stopping and optional continuation** — Ville's inequality bounds the probability that an
-e-process ever exceeds 1/α. For an agent that continuously accumulates evidence and decides
-when to stop, this is closer to the native use case than either p-values or Bayes factors. For
-simple nulls the e-value *is* a likelihood ratio, so the closed forms this library already
-needs cover the common cases.
-<https://arxiv.org/abs/1906.07801>
+**5. Safe testing, e-values, and anytime-valid inference (Grünwald, de Heide, Koolen, JRSS-B
+2024; Ramdas, Grünwald, Vovk, Shafer, *Statistical Science* 2023).** An **e-variable** is a
+non-negative statistic with `E_{H₀}[E] ≤ 1`; Ville's inequality then bounds
+`P(∃t: E_t ≥ 1/α) ≤ α`, so the guarantee holds **under arbitrary optional stopping and optional
+continuation**. E-values *multiply* across independent studies and *average* across dependent
+ones — operations p-values do not support. For an agent that continuously accumulates evidence,
+this is closer to the native use case than either p-values or Bayes factors. **The critical
+nuance for this library: a Bayes factor is an e-value only when the null is *simple*.** With a
+composite null the ordinary BF is generally not an e-value and the optional-continuation
+guarantee is lost; Grünwald et al. recover it with right-Haar priors under group invariance
+(the "safe t-test"). Implementation is a running product of likelihood ratios — arithmetic and
+`math.log`, no sampling.
+<https://arxiv.org/abs/1906.07801> · <https://arxiv.org/abs/2210.01948> ·
+counterpoint: <https://arxiv.org/abs/1708.08278>
 
-**6. Simulation-based calibration checking (Talts et al. 2018; Modrák et al. 2023).** SBC turned
-"is my Bayesian implementation correct" from an unanswerable question into a mechanical test.
-Modrák et al. sharpened it with better-powered test statistics and clarified what SBC can and
-cannot detect. **Consequence: every model in this territory can ship a machine-checkable
-correctness certificate**, which is a considerably stronger claim than golden-value tests.
-<https://arxiv.org/abs/1804.06788> · <https://arxiv.org/abs/2211.02383>
+**6. Simulation-based calibration checking (Talts et al. 2018; Modrák et al., *Bayesian
+Analysis* 2023).** SBC turned "is my Bayesian implementation correct" from an unanswerable
+question into a mechanical test. Modrák et al.'s correction is the important part and is a
+genuine surprise: **rank-based SBC on parameters alone cannot detect a sampler that ignores the
+data — an implementation whose posterior equals the prior passes classic SBC perfectly.** The
+fix is data-dependent test quantities, with the joint likelihood of the data singled out as
+especially useful, plus ECDF-difference plots with *simultaneous* bands rather than histograms
+with pointwise ones. **Consequence: every model in this territory can ship a machine-checkable
+correctness certificate** — a considerably stronger claim than golden-value tests — provided the
+harness includes likelihood-based test quantities and not just parameter ranks.
+<https://arxiv.org/abs/1804.06788> · <https://arxiv.org/abs/2211.02383> ·
+ECDF bands: <https://arxiv.org/abs/2103.10522>
 
 **7. Stacking of predictive distributions (Yao, Vehtari, Simpson, Gelman, 2018).** Established
 that under M-open (no candidate model is true — always, for an agent) stacking LOO predictive
@@ -196,12 +224,31 @@ hack.
 <https://arxiv.org/abs/2411.17284> · <https://openreview.net/forum?id=3iDxHRQfVy> ·
 <https://arxiv.org/abs/2508.03766>
 
-**11. General Bayesian updating / loss-likelihood bootstrap (Bissiri, Holmes, Walker 2016;
-Lyddon, Holmes, Walker 2019).** A coherent way to update beliefs about a parameter defined by a
-**loss function** rather than a likelihood — which is exactly the agent's situation when it
-cares about a decision-relevant quantity (a median, a quantile, a cost) and has no generative
-model. Pairs naturally with row 20.
-<https://arxiv.org/abs/1306.6430> · <https://arxiv.org/abs/1709.07616>
+**11. General Bayesian updating, the loss-likelihood bootstrap, and the posterior bootstrap
+(Bissiri–Holmes–Walker 2016; Lyddon–Holmes–Walker 2019; Fong–Lyddon–Holmes 2019).** A coherent
+way to update beliefs about a parameter defined by a **loss function** rather than a likelihood —
+exactly the agent's situation when it cares about a decision-relevant quantity (a median, a
+quantile, a timeout, a cost) and has no generative model. Lyddon et al.'s result is that the
+weighted-likelihood bootstrap is **exact, not approximate**, under a Bayesian nonparametric
+model. Fong et al.'s **posterior bootstrap** then fixes the Bayesian bootstrap's one real
+weakness at tiny n — that it puts zero mass outside the observed values — by appending `T′`
+pseudo-observations from a parametric centering measure before weighting, so a DP concentration
+parameter blends in prior information continuously. Embarrassingly parallel, independent
+samples, no MCMC, no convergence diagnostics.
+<https://arxiv.org/abs/1306.6430> · <https://arxiv.org/abs/1709.07616> ·
+<https://arxiv.org/abs/1902.03175> · martingale posteriors: <https://arxiv.org/abs/2103.15671>
+
+**12. Regression-based value-of-information computation (Strong & Oakley 2013; Strong, Oakley &
+Brennan 2014; Strong et al. 2015; Heath, Manolopoulou & Baio 2017, 2019).** VOI used to require
+nested Monte Carlo — an outer loop over hypothetical data and an inner loop over the posterior,
+often hours per parameter. The modern approach **regresses net benefit on the parameter of
+interest across an existing single-loop sample**, so EVPPI ≈ `mean(max_a fitted) − max_a
+mean(fitted)`. With a low-dimensional parameter this is a binned mean or a simple spline — pure
+Python. Heath et al.'s review is the practical map of which method to use when; their moment-
+matching extension gives the whole EVSI-vs-n curve from one fit. This is what makes row 8
+tractable beyond the closed-form normal case.
+<https://arxiv.org/abs/1507.02513> · <https://arxiv.org/abs/1611.01373> ·
+<https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4819801/>
 
 ---
 
@@ -231,7 +278,12 @@ Rejected, with the reason. Ordered roughly by how tempting each was.
 | **Bayes factors for non-nested composite hypotheses via intrinsic/fractional Bayes factors** | Solves the improper-prior problem elegantly but is fiddly, contested, and would need per-model derivation. Row 6's robustness region is a more honest response to the same worry. |
 | **Decision trees with sequential/multi-stage decisions (full dynamic programming)** | A two-stage decision with a "gather information first" node is row 8. Beyond two stages, the specification burden on the agent (a tree through CLI flags) exceeds the value; and a genuinely multi-stage problem is an MDP, i.e. another territory. |
 | **Prior predictive checking as a standalone model** | It is a *step*, not a model — folded into rows 6 and 11 as an automatic output (the tool should always report what the prior implies about observables before showing the posterior). |
-| **Multi-armed bandit algorithms other than Thompson (UCB, EXP3, Gittins)** | UCB and EXP3 are not Bayesian; Gittins indices are Bayesian-optimal but computationally forbidding and only apply to discounted independent-arm problems. Row 23 covers the need. |
+| **Multi-armed bandit algorithms other than Thompson (UCB, EXP3, Gittins)** | UCB and EXP3 are not Bayesian; Gittins indices are Bayesian-optimal but computationally forbidding and only apply to discounted independent-arm problems. Row 23 covers the need, and TS additionally emits allocation probabilities (= P(best)), which deterministic UCB cannot. |
+| **Nested sampling (Skilling)** | Computes the marginal likelihood robustly, including multimodal cases, and is genuinely implementable in pure Python. Cut because its payoff is Bayes factors for hard, non-nested models — a question this territory answers with closed forms and 1-D quadrature for the cases an agent actually meets. Reconsider only if a real non-conjugate model-comparison need appears. |
+| **Bayesian quadrature / probabilistic numerics** | Puts a GP prior on the integrand to integrate expensive functions in few evaluations. Elegant, but the integrands here are cheap, so the GP machinery costs more than the integral it saves. |
+| **Gaussian-process-based EVPPI (Heath et al.)** | The best-performing general EVPPI method in the published comparisons, but O(N³) with a GP fit per parameter. Row 8's closed forms plus binned-mean regression cover the low-dimensional cases; this is the cut we would revisit first if EVPPI becomes central. |
+| **Cooke's Classical Method for expert aggregation (performance-weighted pooling)** | Weights experts by calibration on seed questions with known answers. Strictly better than equal weights *when you have seed questions* — and an agent essentially never does at decision time. Row 19's fitted extremization coefficient captures the same idea when a scored history exists. |
+| **Bayesian networks for evidence combination** | See above under graphical models; also the specific temptation of "combine sources via a noisy-OR". Requires a structure the agent would have to invent, and the invented structure drives the answer. |
 
 ---
 
@@ -269,6 +321,10 @@ Rejected, with the reason. Ordered roughly by how tempting each was.
 - Kass, R. & Raftery, A. (1995). Bayes factors. *JASA* 90(430):773–795. <https://doi.org/10.1080/01621459.1995.10476572>
 - Rouder, Speckman, Sun, Morey, Iverson (2009). Bayesian t tests for accepting and rejecting the null hypothesis. *Psychonomic Bulletin & Review* 16(2):225–237. <https://doi.org/10.3758/PBR.16.2.225>
 - Schönbrodt, F. & Wagenmakers, E-J. (2018). Bayes factor design analysis: planning for compelling evidence. *Psychonomic Bulletin & Review* 25:128–142. <https://doi.org/10.3758/s13423-017-1230-y>
+- Schönbrodt, Wagenmakers, Zehetleitner & Perugini (2017). Sequential hypothesis testing with Bayes factors. *Psychological Methods* 22:322–339. <https://osf.io/qny5x/>
+- Stefan, Gronau, Schönbrodt & Wagenmakers (2019). A tutorial on Bayes factor design analysis using an informed prior. *Behavior Research Methods*. <https://link.springer.com/article/10.3758/s13428-018-01189-8>
+- de Heide, R. & Grünwald, P. *Why optional stopping can be a problem for Bayesians.* <https://arxiv.org/abs/1708.08278>
+- Ramdas, Grünwald, Vovk, Shafer (2023). Game-theoretic statistics and safe anytime-valid inference. *Statistical Science* 38(4):576–601. <https://arxiv.org/abs/2210.01948> · Ramdas & Wang (2024). *Hypothesis testing with e-values.* <https://arxiv.org/abs/2410.23614>
 - Heck, D. (2019). A caveat on the Savage–Dickey density ratio. *BJMSP* 72(2):316–333. <https://bpspsychub.onlinelibrary.wiley.com/doi/10.1111/bmsp.12150>
 - Grünwald, de Heide, Koolen. *Safe Testing.* <https://arxiv.org/abs/1906.07801>
 - van Erven / Ramdas et al. on the Jeffreys–Lindley paradox and resolution. <https://arxiv.org/pdf/1610.09433>
@@ -276,9 +332,11 @@ Rejected, with the reason. Ordered roughly by how tempting each was.
 
 **Computation, diagnostics, robustness**
 - Vehtari, Gelman, Simpson, Carpenter, Bürkner (2021). Rank-normalization, folding, and localization: an improved R̂. *Bayesian Analysis* 16(2):667–718. <https://arxiv.org/abs/1903.08008>
-- Vehtari, Simpson, Gelman, Yao, Gabry. *Pareto smoothed importance sampling.* (rev. 2024) <https://arxiv.org/abs/1507.02646>
+- Vehtari, Simpson, Gelman, Yao, Gabry (2024). Pareto smoothed importance sampling. *JMLR* 25(72). <https://jmlr.org/papers/v25/19-556.html> · <https://arxiv.org/abs/1507.02646> · k̂ threshold reference: <https://mc-stan.org/loo/reference/pareto-k-diagnostic.html>
+- Zhang, J. & Stephens, M.A. (2009). A new and efficient estimation method for the generalized Pareto distribution. *Technometrics* 51(3):316–325. (The closed-form profile estimator PSIS uses.)
 - Vehtari, Gelman, Gabry (2017). Practical Bayesian model evaluation using leave-one-out cross-validation and WAIC. *Stat. & Computing* 27:1413–1432. <https://arxiv.org/abs/1507.04544>
-- Kallioinen, Paananen, Bürkner, Vehtari (2023). Detecting and diagnosing prior and likelihood sensitivity with power-scaling. *Stat. & Computing* 34:57. <https://arxiv.org/abs/2107.14054>
+- Kallioinen, Paananen, Bürkner, Vehtari (2023). Detecting and diagnosing prior and likelihood sensitivity with power-scaling. *Stat. & Computing* 33:57. <https://arxiv.org/abs/2107.14054> · <https://n-kall.github.io/priorsense/> · <https://cran.r-project.org/web/packages/priorsense/vignettes/powerscaling.html>
+- Nguyen, H.V. & Vreeken, J. (2015). Non-parametric Jensen–Shannon divergence. ECML PKDD. (Source of the cumulative JS distance power-scaling uses; cited by name — arXiv identifier not verified in this pass.)
 - Simpson, Rue, Riebler, Martins, Sørbye (2017). Penalising model component complexity. *Statistical Science* 32(1):1–28. <https://arxiv.org/abs/1403.4630>
 - Talts, Betancourt, Simpson, Vehtari, Gelman (2018). Validating Bayesian inference algorithms with simulation-based calibration. <https://arxiv.org/abs/1804.06788>
 - Modrák, Moon, Kim, Bürkner, Huurre, Faltejsková, Gelman, Vehtari (2023). Simulation-based calibration checking for Bayesian computation. *Bayesian Analysis*. <https://arxiv.org/abs/2211.02383>
@@ -287,21 +345,48 @@ Rejected, with the reason. Ordered roughly by how tempting each was.
 - Gelman, Vehtari, Simpson, et al. (2020). *Bayesian Workflow.* <https://arxiv.org/abs/2011.01808>
 - Yao, Vehtari, Simpson, Gelman (2018). Using stacking to average Bayesian predictive distributions. *Bayesian Analysis* 13(3):917–1007. <https://arxiv.org/abs/1704.02030>
 
-**Decision theory, A/B, pooling, elicitation**
-- Cook, J.D. *Exact calculation of Beta inequalities.* (closed-form P(X>Y) for Beta variates) <https://www.johndcook.com/exact_beta_inequalities.pdf>
-- Cook, J.D. *Random inequalities V: Beta distributions.* <https://www.johndcook.com/blog/2008/08/21/random-inequalities-v-beta-distributions/>
-- Miller, E. *Formulas for Bayesian A/B testing.* <https://www.evanmiller.org/bayesian-ab-testing.html>
+**Decision theory, loss functions, value of information**
+- Howard, R.A. (1966). Information value theory. *IEEE Trans. Systems Science and Cybernetics* 2(1):22–26. (Origin of the "value of clairvoyance" upper bound.)
+- Howard, R.A. & Abbas, A. *The Foundations of Decision Analysis.*
+- Raiffa, H. & Schlaifer, R. (1961). *Applied Statistical Decision Theory.* (Unit normal loss integral; conjugate pre-posterior analysis.)
+- Zellner, A. (1986). Bayesian estimation and prediction using asymmetric loss functions. *JASA* 81(394):446–451. <https://doi.org/10.1080/01621459.1986.10478289> (LINEX; origin Varian 1975.)
+- Arrow, Harris & Marschak (1951). Optimal inventory policy. *Econometrica* 19(3):250–272. (Newsvendor critical fractile.)
+- Strong, M. & Oakley, J. (2013). An efficient method for computing single-parameter partial EVPI. *Medical Decision Making* 33(6). <https://journals.sagepub.com/doi/full/10.1177/0272989X12465123>
+- Strong, Oakley & Brennan (2014). Estimating multiparameter partial EVPI using the PSA sample: a nonparametric regression approach. <https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4819801/>
+- Heath, Manolopoulou & Baio (2017). A review of methods for the analysis of the expected value of information. *MDM* 37(7):747–758. <https://arxiv.org/abs/1507.02513>
+- Heath, Manolopoulou & Baio (2019). Estimating EVSI across different sample sizes by moment matching and nonlinear regression. *MDM* 39(4). <https://arxiv.org/abs/1611.01373>
+- Kunst et al. (2020). Computing the EVSI: practical guidance comparing four methods. *Value in Health*. <https://pmc.ncbi.nlm.nih.gov/articles/PMC8183576/>
+- O'Hagan, A. & Stevens, J. (2001). Bayesian assessment of sample size for clinical trials of cost-effectiveness. *MDM* 21:219–230. O'Hagan, Stevens & Campbell (2005). Assurance in clinical trial design. *Pharmaceutical Statistics* 4:187–201. doi:10.1002/pst.175
+- Kunzmann et al. *A review of Bayesian perspectives on sample size derivation for confirmatory trials.* <https://arxiv.org/abs/2006.15715>
+
+**A/B testing, pooling, elicitation, robustness**
+- Cook, J.D. *Exact calculation of Beta inequalities.* <https://www.johndcook.com/exact_beta_inequalities.pdf> · *Random inequalities V.* <https://www.johndcook.com/blog/2008/08/21/random-inequalities-v-beta-distributions/>
+- Miller, E. *Formulas for Bayesian A/B testing* (exact closed forms, 2- and 3-variant, plus the Poisson case). <https://www.evanmiller.org/bayesian-ab-testing.html>
+- Stucchio, C. (2015). *Bayesian A/B testing at VWO* (expected loss, threshold of caring, sample-size bounds). <https://vwo.com/downloads/VWO_SmartStats_technical_whitepaper.pdf> · <https://www.chrisstucchio.com/blog/2014/bayesian_ab_decision_rule.html>
+- Robinson, D. *Is Bayesian A/B testing immune to peeking?* <http://varianceexplained.org/r/bayesian-ab-testing/> · Georgiev, G. <https://blog.analytics-toolkit.com/2017/bayesian-ab-testing-not-immune-to-optional-stopping-issues/>
 - Kruschke, J. (2013). Bayesian estimation supersedes the t test. *JEP: General* 142(2):573–603. <https://doi.org/10.1037/a0029146>
 - Kruschke, J. (2018). Rejecting or accepting parameter values in Bayesian estimation (ROPE + HDI). *AMPPS* 1(2):270–280. <https://doi.org/10.1177/2515245918771304>
-- Heath, Manolopoulou, Baio. *A review of methods for the analysis of the expected value of information.* <https://arxiv.org/abs/1610.03619>
-- Satopää, Baron, Foster, Mellers, Tetlock, Ungar (2014). Combining multiple probability predictions using a simple logit model (extremization). *Int. J. Forecasting* 30(2):344–356. <https://doi.org/10.1016/j.ijforecast.2013.09.009>
-- Walley, P. (1996). Inferences from multinomial data: learning about a bag of marbles (Imprecise Dirichlet Model). *JRSS-B* 58(1):3–57. <https://doi.org/10.1111/j.2517-6161.1996.tb02065.x>
+- Critique: HDI+ROPE is not transformation-invariant. *Psychological Methods* (2024). <https://pubmed.ncbi.nlm.nih.gov/38780591/>
+- Genest, C. & Zidek, J. (1986). Combining probability distributions: a critique and an annotated bibliography. *Statistical Science* 1(1):114–135. <https://projecteuclid.org/journals/statistical-science/volume-1/issue-1/Combining-Probability-Distributions-A-Critique-and-an-Annotated-Bibliography/10.1214/ss/1177013825.full>
+- Satopää, Baron, Foster, Mellers, Tetlock, Ungar (2014). Combining multiple probability predictions using a simple logit model. *Int. J. Forecasting* 30(2):344–356. <https://doi.org/10.1016/j.ijforecast.2013.09.009>
+- Satopää & Ungar. *Combining and extremizing real-valued forecasts.* <https://arxiv.org/abs/1506.06405> · *Modeling probability forecasts via information diversity.* <https://arxiv.org/abs/1406.2148>
+- Mellers et al. (2014). Psychological strategies for winning a geopolitical forecasting tournament. *Psychological Science* 25(5):1106–1115. <https://journals.sagepub.com/doi/10.1177/0956797614524255>
+- Walley, P. (1996). Inferences from multinomial data: learning about a bag of marbles (IDM). *JRSS-B* 58(1):3–57.
+- Bernard, J-M. (2005). An introduction to the imprecise Dirichlet model for multinomial data. *IJAR*. Lecture slides with all bound formulas: <https://school06.sipta.org/symprog/bernard-idm.pdf>
+- Berger, J. & Berliner, L.M. (1986). Robust Bayes and empirical Bayes analysis with ε-contaminated priors. *Annals of Statistics* 14(2):461–486. <https://projecteuclid.org/journals/annals-of-statistics/volume-14/issue-2/Robust-Bayes-and-Empirical-Bayes-Analysis-with-_epsilon-Contaminated-Priors/10.1214/aos/1176349933.full>
+- SHELF elicitation framework (protocol, templates, roulette method). <https://shelf.sites.sheffield.ac.uk/> · package manual <https://cran.r-project.org/web/packages/SHELF/SHELF.pdf>
+- `LearnBayes::beta.select` — the two-quantile Beta fit algorithm. <https://rdrr.io/cran/LearnBayes/src/R/beta.select.R>
+- Mikkola et al. *Expert knowledge elicitation: subjective but scientific.* *The American Statistician*. <https://www.tandfonline.com/doi/full/10.1080/00031305.2018.1518265>
+
+**Resampling, shrinkage, bandits**
 - Rubin, D. (1981). The Bayesian bootstrap. *Annals of Statistics* 9(1):130–134. <https://doi.org/10.1214/aos/1176345338>
 - Lyddon, Holmes, Walker (2019). General Bayesian updating and the loss-likelihood bootstrap. *Biometrika* 106(2):465–478. <https://arxiv.org/abs/1709.07616>
+- Fong, Lyddon & Holmes (2019). Scalable nonparametric sampling from multimodal posteriors with the posterior bootstrap. ICML. <https://arxiv.org/abs/1902.03175>
+- Fong, Holmes & Walker. *Martingale posterior distributions.* <https://arxiv.org/abs/2103.15671>
 - Bissiri, Holmes, Walker (2016). A general framework for updating belief distributions. *JRSS-B* 78(5):1103–1130. <https://arxiv.org/abs/1306.6430>
 - Efron, B. & Morris, C. (1975). Data analysis using Stein's estimator and its generalizations. *JASA* 70(350):311–319. Also Efron & Hastie, *CASI* ch.7: <https://efron.ckirby.su.domains/other/CASI_Chap7_Nov2014.pdf>
-- Agrawal, S. & Goyal, N. Analysis of Thompson sampling for the multi-armed bandit problem. <https://arxiv.org/abs/1111.1797>
-- Russo, Van Roy, Kazerouni, Osband, Wen. *A tutorial on Thompson sampling.* <https://arxiv.org/abs/1707.02038>
+- Agrawal, S. & Goyal, N. (2013). Further optimal regret bounds for Thompson sampling. AISTATS. <https://arxiv.org/abs/1209.3353> · JACM 64(5). <https://dl.acm.org/doi/10.1145/3088510>
+- Russo, Van Roy, Kazerouni, Osband, Wen (2018). *A tutorial on Thompson sampling.* <https://arxiv.org/abs/1707.02038>
 
 **Few-groups hierarchical / meta-analysis**
 - Röver, Bender, Dias, Schmid, Schmidli, Sturtz, Weber, Friede (2021). On weakly informative prior distributions for the heterogeneity parameter in Bayesian random-effects meta-analysis. *Research Synthesis Methods* 12(4):448–474. <https://arxiv.org/abs/2007.08352>
@@ -318,6 +403,14 @@ Rejected, with the reason. Ordered roughly by how tempting each was.
 **Numerics (already in the project's Part 0, repeated for completeness)**
 - ASA063 — incomplete beta. <https://people.math.sc.edu/Burkardt/py_src/asa063/asa063.html>
 - ASA032 — incomplete gamma. <https://people.math.sc.edu/Burkardt/c_src/asa032/asa032.html>
+
+**Citation-verification note.** URLs above were returned by search or fetched during this pass.
+Cited by name without a verified live URL, because they are pre-web or paywalled: Howard (1966)
+*Information Value Theory*; Raiffa & Schlaifer (1961); Arrow, Harris & Marschak (1951);
+O'Hagan & Stevens (2001) *MDM*; Zhang & Stephens (2009) *Technometrics*; Walley (1996) *JRSS-B*;
+Efron & Morris (1975) *JASA*; Nguyen & Vreeken (2015). The Satopää extremization coefficient is
+deliberately **not** quoted as a specific number — published fits exceed 1 but the paper is
+paywalled and the correct value is data-dependent (see row 19's refusal condition).
 
 ---
 
@@ -353,9 +446,20 @@ Consolidated so the shared math layer can be scoped once. Ordered by how many ro
 | `statistics.NormalDist` (`cdf`, `inv_cdf`) | 3, 9, 15, 19, 22 | stdlib. Free. |
 | `random.gammavariate` / `betavariate` / `expovariate` | 18, 20, 23, and all sampling-based rows | stdlib, correctly implemented. Free. |
 | logsumexp (numerically stable) | 13, 21, 25 | Five lines. |
-| Bisection / Brent root-find | 4, 6, 10, 11, 17 | Twenty lines. Used for decision-flip thresholds, robustness regions, quantile inversion, quantile-matched prior fitting. |
-| Nelder–Mead (derivative-free, ≤6 dims) | 15, 22 | ~60 lines. No gradients required — this is the reason Laplace is feasible at all. |
+| Bisection / Brent / golden-section root-find and 1-D optimiser | 4, 6, 10, 11, 17, 19, 20 | Twenty to forty lines. Used for decision-flip thresholds, robustness breakdown points, ε-contamination (point-mass contaminants reduce to a 1-D search), quantile inversion, quantile-matched prior fitting, extremization-coefficient fitting, and loss-defined bootstrap estimates. **The second-most reused primitive after incomplete beta.** |
+| Nelder–Mead (derivative-free, ≤6 dims) | 15, 20, 22 | ~60 lines. No gradients required — this is the reason Laplace is feasible at all. |
 | Dense linear algebra: determinant + solve, ≤ 6×6 | 22 | Gaussian elimination with partial pivoting. Numerically fine at this size. |
-| Generalized-Pareto tail fit (2-param) | 6, 21 | Closed-form profile-likelihood estimator; **no optimiser needed**. Unlocks PSIS and thus k̂ diagnostics. |
-| Rank-normalisation, split-R̂, bulk/tail-ESS, MCSE | 14, and every MCMC-backed row | Sorting + autocovariance sums. The autocovariance is O(N²) naively — use the Geyer initial-positive-sequence truncation to keep it linear-ish in practice. |
-| Gauss–Legendre or adaptive Simpson quadrature (1-D) | 5, 8, 10 | Fixed 64-node Gauss–Legendre is sufficient for the JZS integral and the rate comparisons. |
+| Generalized-Pareto tail fit (Zhang–Stephens empirical-Bayes profile estimator) | 6, 21 | ~40 lines of `log`/`sqrt` over a grid of the profile parameter. **Closed form — no optimiser, no matrices.** Unlocks PSIS and therefore k̂ diagnostics. |
+| Unit normal loss integral `L(z) = φ(z) − z(1−Φ(z))` | 8 | One line on `NormalDist`. Turns EVPI/EVSI from a Monte Carlo job into a closed form for the two-action normal case. |
+| EM / fixed-point simplex weight update | 25 | `wₖ ← wₖ·(1/n)Σᵢ pᵢₖ/(Σⱼwⱼpᵢⱼ)`, monotone on a concave objective. ~15 lines; removes the need for any constrained optimiser. |
+| Weighted ECDF + cumulative Jensen–Shannon distance | 6 | Sorting plus a trapezoid sum over CDFs. Notably **does not** need density estimation. |
+| Rank statistics + uniformity test with simulated null bands | 26 | For SBC. The simultaneous band is obtained by simulating M sets of L uniform ranks — exact, no asymptotics. |
+| Rank-normalisation, split-R̂, bulk/tail-ESS, MCSE | 14, and every MCMC-backed row | Sorting + autocovariance sums. The autocovariance is O(N²) naively — use the Geyer initial-positive-sequence truncation to keep it near-linear in practice. |
+| Gauss–Legendre or adaptive Simpson quadrature (1-D) | 5, 8, 10, 12 | Fixed 64-node Gauss–Legendre is sufficient for the JZS integral, the rate comparisons, and the PC-prior KLD for Student-t degrees of freedom. |
+
+**One structural observation that should shape the build order.** At the dimensionality this
+library targets, **a grid replaces the entire approximate-inference stack**. Power-scaling,
+Savage–Dickey, the hierarchical (μ, τ) marginal, LOO, and prior-sensitivity refits all become
+exact quadrature at ≤3 parameters — which removes k̂, R̂, ESS, divergences, and the whole PSIS
+layer from the problem. PSIS and MCMC are worth building, but they are the *fallback* path for
+4–10 parameters, not the default. Build the grid engine first.

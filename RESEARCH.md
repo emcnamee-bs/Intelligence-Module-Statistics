@@ -196,7 +196,7 @@ change the design**; per-model detail stays in the territory files.
 
 | # | Territory | Report | Models |
 |---|---|---|---|
-| 01 | Bayesian inference & decision theory | pending | — |
+| 01 | Bayesian inference & decision theory | ✅ `01-bayesian-decision-inference.md` | 26 + 26 cut |
 | 02 | Causal inference | ✅ `02-causal-inference.md` | 24 + 15 cut |
 | 03 | Forecasting & time series | pending | — |
 | 04 | Robust & nonparametric | ✅ `04-robust-nonparametric.md` | 26 + 30 cut |
@@ -790,3 +790,66 @@ caveat still applying.
 
 Numerics requirement confirms §1.12 unchanged: regularized incomplete beta (t quantiles) and
 incomplete gamma (χ² tails). Nothing else.
+
+### 1.34 The standard correctness test has a blind spot aimed exactly at our worst failure
+
+**Source:** territory 01. This is a direct hit on the verification design in spec §11.
+
+Simulation-based calibration (SBC) is the field's standard test for "is this posterior implementation
+correct", and it was the natural candidate for L2/L3 in this library. Modrák et al. (2023) showed
+that **an implementation whose posterior simply equals the prior passes classic rank-based SBC
+perfectly.**
+
+That is precisely the failure this project most needs to catch. A model that silently ignores its
+data and returns the prior would produce confident, well-formed, plausible output — and would sail
+through the test we were going to trust. It is the worst possible combination: a tool that looks
+authoritative while contributing nothing, handed to an agent already prone to overconfidence.
+
+**Action:** any SBC harness in this library must include **data-dependent test quantities** — the
+joint log-likelihood at minimum — not parameter ranks alone. Added to spec §11 as a stated
+requirement rather than an implementation detail, because the failure mode is invisible without it.
+
+Generalisable lesson, and the second time in two territories that a standard diagnostic has failed in
+the small/adversarial regime (§1.28 Shapiro–Wilk, now SBC): **a passing assumption or correctness
+check is not evidence unless its power against the specific failure has been established.** Worth
+stating as a project-wide principle in the spec, since it has now bitten in routing, in assumption
+testing, and in correctness testing.
+
+### 1.35 Build-order finding: grid before MCMC
+
+**Source:** territory 01, measured rather than estimated.
+
+- Pure-Python MCMC at **7 parameters, 60,000 iterations: 0.14 s.** Compute is a non-issue. The
+  engineering budget goes to R̂/ESS gating and refusal logic, not to optimisation.
+- **At ≤ 3 parameters, a grid removes the entire diagnostic layer.** No PSIS, no k̂, no R̂, no ESS, no
+  divergences. Power-scaling sensitivity, Savage–Dickey ratios, hierarchical τ integration and LOO all
+  become **exact quadrature**.
+
+Since the overwhelming majority of agent-scale Bayesian questions are 1–3 parameters, the grid engine
+is both the common path and the one with no diagnostics to get wrong.
+
+**Action:** build the grid engine first; MCMC becomes the 4–10 parameter fallback, shipped later and
+behind convergence gating. This further shrinks Wave 0 — `lib/mcmc.py` moves out of the critical path
+entirely, consistent with §1.12 and §1.27.
+
+### 1.36 A specific agent failure mode with a specific fix
+
+**Source:** territory 01. Agents habitually conflate **the posterior for a parameter** with **the
+posterior predictive for the next observation** — reporting the uncertainty in the mean when the
+question was about the next value. The two differ by exactly the observation noise, which is usually
+the larger term.
+
+The fix is structural rather than educational: the Normal-Inverse-Gamma model ships **both**, labelled
+distinctly, always. A tool that emits only one invites the substitution.
+
+This is the §1.10 "incomplete reporting" pattern again — a technically correct number that misleads
+by omission — and the same remedy applies: make the output contract carry both quantities so the
+agent cannot silently pick the wrong one.
+
+Also flagged and worth carrying into the decision family: `P(A > B)` alone is **not** a sufficient
+stopping quantity, because it is magnitude-blind. It must be paired with **expected loss**, which is
+what actually answers "can I act on this yet". Territory 01 and territory 10 converge here from
+opposite directions (§1.16 caveat applies).
+
+Nice concrete instance for SKILL.md: **"what timeout should I set" is a newsvendor problem** — an
+asymmetric-loss Bayes action, not a percentile lookup.
