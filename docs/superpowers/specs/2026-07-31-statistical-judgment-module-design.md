@@ -1,390 +1,334 @@
 # Design: Statistical Judgment Module
 
-**Date:** 2026-07-31 (revised after the 13-territory research sweep)
+**Date:** 2026-07-31 · **Revision 3** — after the 13-territory sweep, 7 recorded baselines, and 5 adversarial reviews
 **Repo:** https://github.com/emcnamee-bs/Intelligence-Module-Statistics
-**Status:** Revised design, pending review
-**Research basis:** `RESEARCH.md` — 310 models ranked, 266 cut, 576 candidates evaluated
+**Evidence:** `RESEARCH.md` (Parts 0–3) · `evals/baselines/RESULTS.md` · `research/reviews/`
 
 ---
 
-## 1. Purpose
+## 1. What the evidence changed
 
-Give an AI agent the ability to back a judgment call with mathematics instead of intuition, by
-shipping (a) a library of statistical models callable as command-line scripts, and (b) a skill that
-decides **whether statistics is warranted at all** and routes to the right model.
+Revision 2 assumed agents answer judgment calls with "probably" and need a library to compute for
+them. **Seven recorded baselines refuted that.** Fresh agents with no tools passed 23 of 25 required
+criteria, computing Welch t-tests, Wilson score intervals, exact binomial CDFs and the rule of three
+correctly — several verified to three decimal places. Three of them reframed the problem better than
+the model this spec planned to ship for it.
 
-### Thesis
+Revision 3 is built on what the baselines *couldn't* do.
 
-Research on tool-using agents identifies a *confidence dichotomy by tool type*: **evidence tools**
-(search, retrieval) systematically induce overconfidence because the agent mistakes information
-availability for correctness, while **verification tools** improve calibration by grounding reasoning
-against a checkable signal. This module is a verification tool. That is why the token cost is worth
-paying, and the skill states this rationale to the agent. (`RESEARCH.md` §0.2)
+### The selection principle
+
+> **A model earns a slot only if it does something the baselines demonstrably cannot:**
+> **(a)** encodes a fact the agent has no way to know it doesn't know,
+> **(b)** corrects a formula it reliably gets wrong, or
+> **(c)** refuses something it would otherwise confidently do.
+>
+> **Computation alone does not qualify.**
+
+This is the spec's central rule. It cuts the catalogue from 310 candidates to ~14, and it cuts two of
+revision 2's own pilots.
 
 ### Success criteria
 
-1. An agent facing a judgment call it would otherwise answer with "probably" reaches for the module,
-   runs one script, and states a defensible number instead.
-2. The module never fires on decisions where no number could change the action — and can now *prove*
-   that case rather than judge it (§5).
-3. Every script runs on a bare `python3` with no installs and no network.
-4. No script ever emits a confident number when its assumptions are violated, when the question has
-   no answer, or when it fails to beat its own declared baseline.
+1. Every shipped entry point traces to (a), (b), or (c) above, with the baseline evidence cited.
+2. Runs on a bare `python3` — no installs, no network.
+3. When a number would mislead, none is printed, and the exit code makes that unmissable.
+4. Total token cost of a typical use is stated honestly and measured, not asserted.
+
+### Non-goals
+
+Not a data-analysis platform. Not academic reporting. Not domain-specific. Not an MCP server.
+**Does not generate estimates on the agent's behalf** — LLM-elicited priors measure at effective
+sample size zero (`RESEARCH.md` §1.17). It consumes stated numbers and checks them.
 
 ---
 
-## 2. Non-goals
+## 2. The skill
 
-- Not a general data-analysis platform. No plotting, no dataframes, no ETL.
-- Not an academic reporting tool. No APA output.
-- Not domain-specific. No BrightSign-specific models in this scope.
-- Not an MCP server. Plain scripts plus a skill.
-- **Does not generate estimates on the agent's behalf.** LLM-elicited priors measure at effective
-  sample size zero (`RESEARCH.md` §1.17). The module consumes stated numbers and checks, propagates,
-  and stress-tests them. A script that *asks* for a prior is fine; one that invents a prior is a
-  liability.
+*(Revision 2 deleted this section. Restored and expanded.)*
+
+```yaml
+name: statistical-judgment
+description: >
+  Checks whether a statistical claim is even reachable from the data at hand, corrects formulas that
+  are commonly wrong, and refuses conclusions the evidence cannot support. Use when about to state a
+  number, range, probability, or comparison that is not directly observed — a p-value, confidence
+  interval, effect size, failure rate, estimate, forecast, or "X is better than Y" — and especially
+  when the sample is small, when several things were compared or several checks run before a pattern
+  was noticed, when combining results from multiple runs, agents, or sources, when deciding whether
+  more data is worth collecting, or when asked how long something will take. Also use before
+  concluding a search or investigation is complete.
+```
+
+Constraints met: lowercase-hyphen name ≤64 chars, no reserved word, third-person description
+≤1024 chars stating both function and trigger, deliberately trigger-dense because agents under-trigger.
+
+Note the description leads with **checks / corrects / refuses**, not "computes." That is the
+selection principle expressed where discovery happens.
+
+### SKILL.md body — target ≤120 lines
+
+1. **Why this exists** (3 sentences). Verification tools improve agent calibration; evidence tools
+   degrade it (`RESEARCH.md` §0.2). Then the honest part: *you can already compute most of this
+   correctly. What you cannot do is know what you were never told, or catch yourself doing something
+   that felt reasonable.*
+2. **Start here** — `python3 route.py "<your predicament in plain words>"`. One command. The gate is
+   inside it (§3).
+3. **How to read output** — the four outcomes and the `REPORT AS:` line.
+4. **Entry-point map** — one line each, linking directly to `docs/families/*.md`.
+5. **Three things worth knowing before you compute anything** — the highest-value facts, inline
+   because they change behaviour before any script runs: implicit multiplicity, the p<0.05 floors,
+   and pseudo-replication when combining sources.
 
 ---
 
-## 3. The ten governing principles
+## 3. Discovery and the gate — one command
 
-Extracted from the sweep (`RESEARCH.md` §2.1), several from independent directions. Every design
-decision below traces to one.
+*(Revision 2 made the gate a separate mandatory first step. Three reviews independently rejected it:
+`EVPI = min(p,1−p)·L` is nonzero except in degenerate cases so its acceptance criterion was
+unsatisfiable; `EVSI(n) ≤ EVPI` makes the "go measure" direction invalid; it was cleanly populable in
+0 of 6 baseline scenarios; and it demanded exactly the numbers P7 forbids the module to invent.
+Nothing enforced it, and it relitigated a decision the agent made one turn earlier.)*
 
-| # | Principle |
-|---|---|
-| **P1** | Exactness comes from **enumeration under exchangeability**, not from resampling. The bootstrap is an asymptotic approximation and fails hardest at agent-scale n |
-| **P2** | **Never route on an assumption test.** A passing check is not evidence unless its power against the specific failure is established |
-| **P3** | **Trust thresholds scale with n**; several are arithmetic impossibilities, not conventions |
-| **P4** | **Report breakdown values, not pass/fail** |
-| **P5** | The dangerous failures are **composition, provenance, and incomplete reporting** — not model choice |
-| **P6** | **Pseudo-replication** is the dominant violation when combining sources |
-| **P7** | The module **consumes stated numbers; it never generates them** |
-| **P8** | **The decision to use statistics is itself computable** |
-| **P9** | Every model **declares the baseline it must beat**, and prints the baseline instead when it doesn't |
-| **P10** | **Big-data ML benchmark results do not transfer** to agent scale |
+**The gate folds into the router, so complying is the cheapest path rather than an extra step.**
+
+```
+$ python3 route.py "is this 8% slowdown real or did I get unlucky"
+
+BEFORE YOU COMPUTE
+  What size difference would change what you do? If any plausible answer leads to the
+  same action, stop — you do not need this.
+
+MATCHES
+  1. minimum_attainable_p_for_design   [INLINE]  can your design even detect it
+     python3 models/design/minimum_attainable_p_for_design.py --n1 5 --n2 5
+  2. benchmark_runs_needed             [INLINE]  how many runs to detect a given effect
+     python3 models/design/benchmark_runs_needed.py --effect 0.08 --sd 0.05
+```
+
+The precheck is a **minimum-interesting-effect question**, not a loss table — reviews 03 and
+`RESEARCH.md` §1.33 both concluded that is the form agents can actually answer. It costs one line and
+requires no fabricated inputs.
+
+**Router contract.** BM25-style term weighting over `situations` + `keywords` + `title`, pure stdlib.
+At most 3 matches. Below a **no-match floor** it prints `NO CONFIDENT MATCH` plus the family list
+rather than returning something irrelevant; the floor is calibrated against the L4 routing eval set to
+maximise recall subject to zero false positives on should-match-nothing queries, and the calibration
+is recorded beside the constant. `--family <id>` lists a family; `--id <model-id>` prints one usage
+block. When a match declares `composition_hazards`, the router prints them with the match.
+
+A separate `decision_threshold_check` model exists for the minority of cases where a real loss table
+*is* available. It is a model, not a gate.
 
 ---
 
-## 4. Invocation model
+## 4. Governing principles
 
-| Tier | Agent has | Example |
+From `RESEARCH.md` §2.1, with corrections from review 02 applied.
+
+| # | Principle | Status |
 |---|---|---|
-| `INLINE` | A handful of numbers or stated beliefs, passed as flags | `--a-success 3 --a-total 40 --b-success 9 --b-total 41` |
-| `DATAFILE` | A dataset already on disk | `--data runs.csv --col latency_ms` |
-| `MUST-CONSTRUCT-DATA` | Nothing yet; the judgment justifies going and measuring | run the benchmark 30×, *then* model |
-
-Escalation to Tier 3 is no longer a judgment call — it is the output of the value-of-information check
-in §5.
-
----
-
-## 5. The gate — now computable (P8)
-
-**This replaces the heuristic gating doctrine of the previous revision.**
-
-The old design asked the agent to judge whether statistics was warranted ("is this reversible?",
-"would a number change the action?"). Those are heuristics an overconfident agent can talk itself
-past in either direction.
-
-Value-of-information theory makes the gate arithmetic. **The skill's first act is always the same:**
-
-```
-python3 models/decision/value_of_information_reachability.py \
-    --options "ship,hold" --loss-if-wrong 40 --current-belief 0.7 --cost-to-measure 2
-```
-
-For many proposed measurements the Expected Value of Sample Information is **exactly zero at any
-accuracy** — no data could move the decision — and this is provable in about three lines
-(`RESEARCH.md` §1.21). The output routes directly:
-
-| EVPI result | Action |
-|---|---|
-| EVPI = 0 | **Stop.** No measurement can change the decision. The agent now has a *number* justifying stopping. |
-| 0 < EVPI < cost to measure | **Stop.** Information is worth less than it costs. |
-| EVPI > cost, data exists | Tier 1 or 2 — route to a model. |
-| EVPI > cost, data does not exist | **Tier 3.** Constructing the dataset is justified; the check says by how much. |
-
-This single tool is simultaneously the Tier 0 gate, the Tier 3 escalation trigger, and a model in its
-own right. It also answers the cost objection honestly: the module's opening move is a cheap check on
-whether it should run at all.
-
-**Fallback.** When the decision cannot be put in a loss table (no quantified stakes), fall back to the
-qualitative gate: if the decision is cheap to reverse or the answer is already determined, stop.
+| **P1** | Exactness comes from enumeration under exchangeability, not resampling | verified (bootstrap coverage 0.750/0.770/0.885 at n=6) |
+| **P2** | Never route on an assumption test; a passing check is not evidence unless its power is established | verified 3× independently |
+| **P3** | Trust thresholds scale with n; several are arithmetic impossibilities | **all six floors verified by enumeration** |
+| **P4** | Report breakdown values, not pass/fail | design principle |
+| **P5** | The dangerous failures are composition, provenance, incomplete reporting | **evidence weakened** — flagship ARL example was 9% not 76% (§3.14); principle stands, magnitude does not |
+| **P6** | Pseudo-replication dominates when combining sources | design principle; Vovk–Wang fix **proved valid and tight** |
+| **P7** | The module consumes stated numbers; it never generates them | binding |
+| **P8** | ~~The decision to use statistics is computable~~ | **RETIRED.** See §3 |
+| **P9** | Every model declares what it must beat | **narrowed** — `baseline_to_beat` is nullable; only models with a defined comparison operator declare one |
+| **P10** | Big-data ML benchmark results do not transfer to agent scale | verified |
 
 ---
 
-## 6. Repository layout
+## 5. Engines — the real structure
 
-```
-Intelligence-Module-Statistics/
-├── SKILL.md                     # <500 lines. The gate + navigation. Loaded on trigger.
-├── README.md
-├── RESEARCH.md                  # Research log (Parts 0-2)
-├── registry.json                # SINGLE SOURCE OF TRUTH
-├── route.py                     # Discovery: query -> ranked matches + usage
-├── generate_docs.py             # registry.json -> INDEX.md + docs/families/*.md
-├── INDEX.md                     # GENERATED
-├── docs/
-│   ├── families/*.md            # GENERATED, one per family, each opens with a TOC
-│   └── superpowers/specs/
-├── lib/
-│   ├── special.py               # regularized incomplete beta; incomplete gamma + inverse. That is all.
-│   ├── dist.py                  # distributions: pdf/logpdf/cdf/sf/ppf (sampling comes free from `random`)
-│   ├── exact.py                 # CORE: permutation enumeration, rank-statistic nulls by DP,
-│   │                            #       order statistics, math.comb combinatorics
-│   ├── grid.py                  # CORE: 1-3 parameter Bayesian quadrature (no diagnostics needed)
-│   ├── optim.py                 # brentq, brent minimize, Nelder-Mead
-│   ├── report.py                # output contract, --json, the five output modes
-│   ├── dataio.py                # CSV/JSON loading, messy-input handling        [Wave 1]
-│   ├── linalg.py                # small dense: cholesky, QR least squares       [Wave 1]
-│   ├── bootstrap.py             # DEMOTED. Behind measured small-n refusals.    [Wave 2]
-│   └── mcmc.py                  # 4-10 param fallback, behind R-hat/ESS gating  [Wave 2]
-├── models/<family>/<descriptive_name>.py
-├── tests/{lib,models,routing}/
-├── evals/                       # behavioral scenarios + recorded baselines
-└── research/territories/*.md    # 13 reports, ~5000 lines
-```
+Three independent passes found **~18 identity clusters** inside 310 ranked models. The library is not
+a catalogue over a numerics core; it is a small set of engines with thin, situation-specific entry
+points.
 
-`INDEX.md` and `docs/families/` are **generated**; CI fails if regenerating produces a diff.
-All reference files link **directly** from SKILL.md — nested references cause partial reads.
+**Cluster unification must be verified per member.** C1 was asserted at 5/5 and verified at **4/6** —
+the two-sided Wilks interval is transcendental and does not reduce to `n ≥ ln α / ln p`. Every engine
+below carries a membership test in its golden suite.
 
----
-
-## 7. `registry.json` — single source of truth
-
-```json
-{
-  "schema_version": 1,
-  "families": [{"id": "signal-vs-noise", "question": "Is this difference real?"}],
-  "implementations": [
-    {"id": "exact-binomial-coverage-inequality",
-     "path": "lib/exact.py:coverage_inequality",
-     "note": "n >= ln(alpha)/ln(p). Backs 5 registry entries across 4 families."}
-  ],
-  "models": [
-    {
-      "id": "zero-events-observed-upper-bound",
-      "path": "models/tail-risk/zero_events_observed_upper_bound.py",
-      "implementation": "exact-binomial-coverage-inequality",
-      "family": "tail-risk",
-      "title": "Upper bound on a rate after observing zero events",
-      "situations": [
-        "it hasn't failed once in 200 runs, how safe is it really",
-        "no errors so far, what rate can I rule out",
-        "zero failures observed what can I claim"
-      ],
-      "keywords": ["zero events", "rule of three", "no failures", "clean run"],
-      "tier": "INLINE",
-      "usage": "--trials N [--confidence 0.95]",
-      "output": "upper bound on the true rate, and the n needed for a target bound",
-      "baseline_to_beat": "assuming the rate is zero",
-      "naive_answer_is_wrong": false,
-      "refuses_when": "trials < 1",
-      "composition_hazards": [],
-      "data_provenance_required": null,
-      "independence_required": false
-    }
-  ]
-}
-```
-
-**Field rationale** — each closes a failure the sweep found:
-
-| Field | Closes |
-|---|---|
-| `situations` (≥3 phrasings) | Terminology mismatch, the dominant skill-retrieval failure |
-| `implementation` | The identity clusters (§8) — many entries, one tested implementation |
-| `baseline_to_beat` | P9 |
-| `naive_answer_is_wrong` | Models where the obvious answer is *actively misleading*, not merely imprecise (staggered DiD, Kelly folklore, kurtosis heavy-tail detection). Router surfaces the warning even on a weak match |
-| `composition_hazards` | P5 — names model ids that must not be chained into this one |
-| `data_provenance_required` | Mixed-elicitation calibration logs, adaptively-collected studies |
-| `independence_required` | P6 — pseudo-replication |
-
----
-
-## 8. Identity clusters — fewer implementations than entries
-
-Three clusters where differently-named models are the same mathematics (`RESEARCH.md` §2.2):
-
-| Cluster | Identity | Surfaces as |
-|---|---|---|
-| **C1** | `n ≥ ln(α)/ln(p)` | rule of three; Wilks tolerance interval; upper CI on a high quantile; zero-failure MTBF; reruns-to-confidence for flaky tests |
-| **C2** | marginal EVSI = marginal cost | closed-form EVSI/ENBS; Beta-Binomial EVSI; Weitzman reservation values; optimal sample size; stop-or-continue |
-| **C3** | exact null by DP over rank statistics | permutation test; Mann–Whitney; signed-rank; exact CI by test inversion |
-
-C1 alone spans four families and was found by three territories independently. **A dedup pass runs
-before any model code is written.** One tested implementation, many registry entries routing into it.
-
----
-
-## 9. Model script contract
-
-Standalone `python3 models/<family>/<name>.py` with `argparse`, so `--help` always yields exact usage
-without reading the file.
-
-### Header — fixed schema, ≤12 lines, ~120 token budget
-
-```python
-# WHAT        One sentence: what this models.
-# WHEN        The situation that should make you reach for this.
-# INPUTS      Each flag, its meaning, its units.
-# OUTPUT      What the returned numbers mean.
-# BASELINE    What this must beat, and what happens if it doesn't.
-# ASSUMPTIONS What must be true for the answer to be valid.
-# EXAMPLE     One runnable command.
-```
-
-### Six output modes
-
-Three of these (`ROBUSTNESS`, `BASELINE_WINS`, `NO ANSWER EXISTS`) did not exist before the research
-sweep. Each closes a failure mode the previous revision would have shipped.
-
-| Mode | Exit | When | Prints a number? |
+| Engine | Identity | Verified members | Backs |
 |---|---|---|---|
-| `OK` | 0 | Assumptions hold, baseline beaten | Yes |
-| `CAVEAT` | 0 | Strained but informative | Yes + mandatory caveat line |
-| `ROBUSTNESS` | 0 | Assumption is a matter of degree (P4) | Yes + **breakdown value**: how strong the violation must be to overturn the conclusion |
-| `BASELINE_WINS` | 0 | Model fails to beat its declared baseline (P9) | **The baseline's answer**, not the model's |
-| `NO ANSWER EXISTS` | 4 | The question is malformed regardless of data | **No** — explains why, and what decidable question to ask instead |
-| `REFUSED` | 3 | Structural violation; a number would mislead | **No** — states the violation and a concrete remedy |
+| `lib/exact_tail.py` | exact discrete-tail inversion | pending per-member test | ~11 territories; C1 is its k=0 case |
+| `lib/independence.py` | `1 − (1−p)^k` | fan-out ≡ return period ≡ Šidák ≡ reruns-to-confidence | multiplicity, monitoring, reliability |
+| `lib/effective_n.py` | design effect / n_eff | 6 territories | pseudo-replication, pooling, autocorrelated series |
+| `lib/invert.py` | test inversion by bisection | 8 territories | every interval built from a test |
+| `lib/rank_null.py` | exact rank-statistic nulls by DP | permutation, Mann–Whitney, signed-rank | signal-vs-noise |
 
-Usage error is exit `2` (argparse's own). **Refusal is deliberately not 2**, because overloading it
-would make "you typed the flag wrong" indistinguishable from "your data violates the model" — two
-situations demanding opposite responses.
+Supporting, not engines: `lib/special.py` (regularized incomplete beta **and its inverse** — review 05
+found the inverse missing and 5 models need it; incomplete gamma + inverse), `lib/dist.py`,
+`lib/series.py` (**exchangeability / autocorrelation gate — absent from revision 2, needed by 8
+models, underwrites P1**; emits a breakdown value per P4, never a pass/fail test), `lib/report.py`,
+`lib/optim.py`.
 
-`--json` emits the same content with `"status"` set to the mode.
-
-### Why refusal suppresses the number
-
-Agents have been observed **ignoring diagnostics signalling unreliable results and reporting the
-number anyway** (`RESEARCH.md` §0.3). A warning adjacent to a number does not work.
-
-`NO ANSWER EXISTS` is a distinct and arguably higher-value mode: the inputs are fine and the model is
-right, but the question as posed is unanswerable. Examples from the sweep — "when should I give up on
-this long-running process?" has no threshold answer under decreasing hazard (the optimal policy is
-never abandon); reliability-growth extrapolation is formally unsupported; multi-parameter EVPPI is out
-of stdlib reach and the tool should say so rather than approximate.
-
-### Hard arithmetic floors (P3)
-
-Not conventions. Facts about what a design can express. All ship as refusals:
-
-| Situation | Floor |
-|---|---|
-| Two-sided p<0.05, two-sample | Unreachable at n₁=n₂=3 (min p = 0.10) |
-| Two-sided p<0.05, paired | Unreachable at n≤5 (min p = 0.0625) |
-| 95% distribution-free median CI | First exists at n=6 |
-| Split conformal, 95% | n ≥ 19 |
-| `[min,max]` as prediction interval | 71% coverage at n=6; needs n=39 for 95% |
-| Two-sided 95/95 Wilks tolerance | n = 93 |
-| Robust z via MAD | MAD = 0 on data like `[10,10,10,11,10,40]` → IQR fallback required |
-| Heavy tails via kurtosis | Bounded by ≈n−1; at n=10 Cauchy cannot look heavier-tailed than normal. Use `max|x|/Σ|x|` |
+`lib/seq.py` (supermartingale primitives) is deferred with the anytime-valid family — revision 2
+mandated leading with that family while never specifying what it stands on.
 
 ---
 
-## 10. Scenario taxonomy — 12 families
+## 6. Output contract
 
-| # | Family id | The question | Territories |
+*(Revision 2 had six modes, two of which shared exit 0 with the success case. Review 01: `if rc == 0:
+use the number` would hand the agent a naive baseline carrying the module's authority.)*
+
+**Four outcomes. Anything that is not the model's own answer gets its own exit code.**
+
+| Exit | Outcome | Number printed? | Meaning |
 |---|---|---|---|
-| 1 | `signal-vs-noise` | Is this difference real? | 04, 06, 13 |
-| 2 | `estimation` | How big is it, and how sure am I? | 01, 04, 11 |
-| 3 | `forecasting` | What happens next? | 03 |
-| 4 | `causal` | Did X actually cause Y? | 02 |
-| 5 | `evidence-sufficiency` | How much data before I can decide? | 06 |
-| 6 | `synthesis` | How do I combine conflicting sources? | 08 |
-| 7 | `monitoring` | Anomaly, or normal variation? | 13 |
-| 8 | `tail-risk` | How bad can it plausibly get? | 05 |
-| 9 | `decision` | Which option, and is more info worth buying? | 10, 01 |
-| 10 | `calibration` | Am I over- or under-confident? | 07 |
-| 11 | `duration-reliability` | When will it fail / how long will it take? | 09 |
-| 12 | `model-choice` | Which explanation should I believe? | 12 |
+| `0` | `ANSWER` | yes — the model's | Assumptions hold |
+| `2` | usage error | no | argparse's own |
+| `3` | `REFUSED` | **no** | Inputs structurally violate the model |
+| `4` | `UNANSWERABLE` | **no** | The question has no answer regardless of data |
+| `5` | `USE_SIMPLER` | yes — **the simpler answer, labelled as not the model's** | The model does not beat a simpler approach |
+
+`CAVEAT:` and `ROBUSTNESS:` are **annotations on `ANSWER`**, not separate outcomes — which also
+removes revision 2's undefined precedence when modes co-occur.
+
+**Precedence when several apply:** usage → `REFUSED` → `UNANSWERABLE` → `USE_SIMPLER` → `ANSWER`.
+
+**Every outcome ends with a `REPORT AS:` line** giving the sentence the agent should say. This
+converts interpretation into transcription and is the strongest available counter to the observed
+failure of agents reporting numbers their tools flagged (`RESEARCH.md` §0.3).
+
+```
+MODEL: Minimum attainable p-value for this design
+RESULT
+  min_two_sided_p: 0.100
+  can_reach_0.05: false
+ROBUSTNESS: Reaching p<0.05 requires n1=n2>=4 (min p then 0.029).
+REPORT AS: With 3 runs per arm no result can reach p<0.05 — the design cannot
+           produce that conclusion, whatever the data shows.
+```
+
+`--json` emits the same content with `"outcome"` and `"report_as"`. A JSON schema per outcome is part
+of `lib/report.py`'s acceptance criteria, not left to implementation.
 
 ---
 
-## 11. Verification
+## 7. Entry points — ~14, each justified
+
+Every row states which limb of the selection principle it satisfies. **Models the baselines already
+handled correctly are excluded**, including two of revision 2's own pilots.
+
+| # | Entry point | Limb | Why it earns a slot |
+|---|---|---|---|
+| 1 | `minimum_attainable_p_for_design` | (a) | p<0.05 unreachable at n₁=n₂=3. No baseline mentioned this. **All six floors verified** |
+| 2 | `multiplicity_correction_for_search` | (a) | "the biggest agent self-deception" — patterns noticed *after* looking. Zero lib deps |
+| 3 | `three_point_estimate_to_range` | (b) | S5 baseline used `(b−a)/6`. Ships `(μ−a)(b−μ)/7`; PERT identity **verified symbolically** |
+| 4 | `pool_probabilities_with_dependence_discount` | (c) | P6. Refuses / discounts when sources share a generator. Vovk–Wang **proved tight** |
+| 5 | `pool_evidence_from_adaptive_collection` | (c) | "run study k+1 based on study k" is the agent's default and breaks classical pooling |
+| 6 | `quantile_confidence_from_order_statistics` | (a) | At n=100 there is no upper bound above p97. A "p99 from 100 samples" is not a statistic |
+| 7 | `exchangeability_breakdown_value` | (a)(c) | Underwrites P1. Emits a breakdown value, never a pass/fail (P2) |
+| 8 | `discovery_saturation` | (a) | "my last 5 greps found nothing new — am I done?" Good–Turing/Chao1. **Absent from all 310** |
+| 9 | `capture_recapture_remaining` | (a) | "two reviewers, 2 overlaps — how many bugs left?" **Absent from all 310** |
+| 10 | `mcnemar_paired_comparison` | (a) | "A 40/50 vs B 43/50 **on the same items**" — an unpaired test here is simply wrong |
+| 11 | `scaling_exponent_fit` | (a) | "is this O(n²)?" — agents eyeball it. **Absent from all 310** |
+| 12 | `unmeasured_confounding_breakdown_value` | (a) | E-value. The only clean `ROBUSTNESS` producer found |
+| 13 | `benchmark_runs_needed` | (a) | Planning, not testing — the baseline computed the test correctly but never asked how many runs |
+| 14 | `bayes_action_under_stated_loss` | (b) | "what timeout should I set" is a newsvendor problem; agents reach for p99 |
+
+**Deliberately excluded, against revision 2:** `zero_events_observed_upper_bound` — the S3 baseline
+applied the rule of three correctly *and* found a deeper problem (99.9% of *what*?) no model would
+have caught. `benchmark_regression_from_repeated_runs` as a test — S1 computed Welch correctly; only
+the planning half (#13) survives. Excluding these is the selection principle working.
+
+**Calibration ships no model.** Review 04 and review 02 independently concluded its deliverable is a
+**logging protocol** — nothing is computable until predictions and outcomes have been recorded, and
+the real requirement is 120–260 logged predictions, not the 11–25 revision 2 claimed. Ships as
+`docs/families/calibration.md` describing what to record.
+
+---
+
+## 8. Registry
+
+`registry.json` is the single source of truth; `INDEX.md` and `docs/families/*.md` are generated and
+CI fails on drift. Fields: `id`, `path`, `engine`, `family`, `title`, `situations` (≥3 agent
+phrasings — terminology mismatch is the dominant retrieval failure), `keywords`, `tier`, `usage`,
+`output`, `selection_limb` (a/b/c, **required** — no model ships without one), `baseline_to_beat`
+(**nullable**), `refuses_when`, `unanswerable_when`, `composition_hazards`, `data_provenance_required`,
+`independence_required`.
+
+Revision 2's example set `independence_required: false` on the model whose dominant real violation is
+non-exchangeable reruns. Every registry entry is reviewed against its own model's failure modes.
+
+---
+
+## 9. Verification
 
 | Level | Scope | Gate |
 |---|---|---|
-| **L1** | `lib/` golden tests vs **published reference values** — never against SciPy | Every function within its declared error envelope |
-| **L2** | Per-model golden cases | ≥2 cases with literature-published or hand-verifiable answers |
-| **L3** | Property tests | Monotonicity, limits, symmetry, invariance |
-| **L4** | Refusal tests | ≥1 input per model per applicable mode (3, 4, `BASELINE_WINS`) with no number emitted |
-| **L5** | Routing evals | Recall@3 on a labelled query set **and** false-positive control on should-match-nothing queries |
-| **L6** | Behavioral evals | Full scenarios with and against a **pre-recorded baseline** |
+| **L1** | `lib/` golden tests vs **published reference values** (never SciPy) | within declared error envelope |
+| **L2** | Engine membership tests | each claimed cluster member **derived and checked**, per the C1 failure |
+| **L3** | Per-model golden + property tests | ≥2 literature- or hand-verifiable cases |
+| **L4** | Outcome tests | ≥1 input per model per applicable outcome; exits 3 and 4 assert **no number in stdout** |
+| **L5** | Routing evals | recall@3 **and** false-positive control |
+| **L6** | Behavioral evals | vs the 7 recorded baselines |
 
-**Two requirements the sweep forced:**
+**Requirements the evidence forced:**
+- **No number from `RESEARCH.md` enters a header, skill file, or golden test until independently
+  re-derived.** Four claims were refuted by derivation; every one had a correct conclusion attached to
+  a wrong number.
+- **Any SBC harness uses data-dependent test quantities** (joint log-likelihood minimum). A posterior
+  equal to the prior passes rank-based SBC perfectly — and silently ignoring the data is this
+  project's worst failure.
+- **S5 re-specified** with a near-symmetric mode (4/11/18): as posed its mode sat at δ=0.176, beside
+  the crossover where the wrong PERT formula is accidentally right, so it could not detect the bug it
+  existed to detect.
+- **S8 added** — the same question embedded inside a larger task, testing whether baselines degrade
+  when the statistics are implicit rather than posed.
 
-1. **Any SBC harness must use data-dependent test quantities** (joint log-likelihood at minimum), not
-   parameter ranks alone. An implementation whose posterior equals the prior passes classic
-   rank-based SBC perfectly (Modrák et al. 2023) — and a model that silently ignores its data while
-   producing confident output is this project's worst failure mode. (`RESEARCH.md` §1.34)
-2. **P2 applies to our own tests.** A passing check is not evidence unless its power against the
-   specific failure has been established. This bit three times in the sweep — in routing, in
-   assumption testing, and in correctness testing.
-
-**Wave 1 definition of done includes primary-source verification of every constant that ships.** Five
-territories exhausted their search budget; no unverified constant may enter a lookup table, because
-an agent treats a shipped number as authoritative.
-
-CI: run on a clean `python3` with no third-party packages; regenerate docs and fail on diff; assert no
-model imports outside the standard library and `lib/`.
+CI: clean `python3`, no third-party packages; regenerate docs and fail on diff; assert no import
+outside stdlib and `lib/`.
 
 ---
 
-## 12. Delivery waves
+## 10. Waves
 
-### Wave 0 — prove the contract (gate)
+### Wave 0 — prove the contract
 
-1. **Record L6 baselines**: representative judgment tasks run *without* the module, failures captured
-   verbatim.
-2. **Dedup pass** over the 310 ranked models → implementation list + registry entries (§8).
-3. `lib/special.py`, `lib/dist.py`, `lib/exact.py`, `lib/grid.py`, `lib/optim.py`, `lib/report.py`
-   with L1 golden tests green.
-4. `registry.json`, `route.py`, `generate_docs.py`, CI drift check.
-5. **Four pilot models**, chosen to exercise every tier and every output mode:
-   - `value_of_information_reachability` — the gate itself (§5); must produce EVPI = 0 on a
-     constructed case
-   - `zero_events_observed_upper_bound` — INLINE, C1 cluster, exercises `NO ANSWER EXISTS` at n=0
-   - `benchmark_regression_from_repeated_runs` — DATAFILE/MUST-CONSTRUCT, exercises `BASELINE_WINS`
-     and the p<0.05-unreachable floor at n=3
-   - `three_point_estimate_to_range` — INLINE, no data; ships the corrected PERT variance
-     `(μ−a)(b−μ)/7` with the R(δ) identity in its golden tests (`RESEARCH.md` §1.37)
-6. Full L1–L5 ladder green on those four.
+1. `lib/report.py` with all four outcome JSON schemas + `REPORT AS`, and `lib/exact_tail.py` with its
+   **per-member cluster verification**.
+2. `registry.json` schema, `route.py` with the folded-in precheck, `generate_docs.py`, CI drift check.
+   Registry contains **only shipped models** — revision 2 would have had the router pointing at ~306
+   nonexistent scripts.
+3. **Four pilots, chosen so each outcome and each tier is exercised by at least one:**
 
-**→ Review gate.** Contract problems get found on four scripts, not thirty.
+| Pilot | Tier | Outcomes exercised | Limb |
+|---|---|---|---|
+| `minimum_attainable_p_for_design` | INLINE | `ANSWER`, `ROBUSTNESS`, `REFUSED` | (a) |
+| `three_point_estimate_to_range` | INLINE | `ANSWER`, `CAVEAT` | (b) |
+| `unmeasured_confounding_breakdown_value` | INLINE | `ANSWER`, `ROBUSTNESS`, `UNANSWERABLE` | (a) |
+| `benchmark_runs_needed` | MUST-CONSTRUCT | `ANSWER`, `USE_SIMPLER` | (a) |
 
-### Wave 1 — the high-leverage core
-
-~30 models by *frequency × leverage × feasibility*, spanning all 12 families, leading with the
-anytime-valid family (cheapest to implement and best matched to how agents actually collect evidence).
-Primary-source verification of every constant. L6 re-run against baseline.
+4. L1–L5 green on those four. Re-run L6 against the recorded baselines.
 
 **→ Review gate.**
 
-### Wave 2+ — long tail, plus `bootstrap.py` and `mcmc.py` behind their refusals.
+### Wave 1 — the remaining ten entry points, plus the calibration logging protocol. **→ Review gate.**
+
+### Wave 2 — only if L6 shows a real delta. Anything further is justified by measurement, not ambition.
 
 ---
 
-## 13. Risks
+## 11. Risks
 
-| Risk | Status after the sweep | Mitigation |
-|---|---|---|
-| `lib/` numerics wrong | **Downgraded.** Core is two special functions; measured timings show nothing is hard | Published-reference golden tests, declared error envelopes |
-| A model silently ignores its data | **New top risk.** Passes standard SBC | Data-dependent SBC test quantities (§11) |
-| Router misses due to terminology | Unchanged | `situations` phrasing, L5 recall evals |
-| Skill over-triggers | **Downgraded.** Now computable | EVPI reachability as the first act (§5) |
-| Agent reports a flagged number | Unchanged | Refusal suppresses the number; L4 tests |
-| Unverified constants ship | **New.** Five territories hit search caps | Wave 1 definition of done; no unverified lookup tables |
-| Composition errors between tools | **New.** Five hazards found | `composition_hazards` registry field; router prints them |
+| Risk | Mitigation |
+|---|---|
+| A model silently ignores its data | Data-dependent SBC quantities (§9) |
+| Cluster unification is wrong | Per-member verification; C1 already failed at 4/6 |
+| A `RESEARCH.md` number is wrong | Re-derive before shipping; 4 of ~40 checked claims were refuted |
+| Agent uses a `USE_SIMPLER` number as the model's | Distinct exit code 5; `REPORT AS` names the source |
+| Router misses on terminology | `situations` phrasing; L5 recall evals |
+| Token cost exceeds value | Honest measurement in L6, ~4,600–8,000 realistic; Wave 2 gated on measured delta |
+| The module adds nothing over the baseline | **The selection principle, applied per model, with the baseline evidence cited in the registry** |
 
 ---
 
-## 14. Conventions
+## 12. Conventions
 
-- Python 3.9+, standard library only, no third-party imports anywhere.
-- Forward slashes in all paths.
-- Descriptive model filenames: `zero_events_observed_upper_bound.py`, not `rule3.py`.
-- Every threshold documented with its reasoning at the point of definition; thresholds that depend on
-  n are written as functions of n (P3).
-- No time-sensitive statements in SKILL.md or model headers.
+Python 3.9+, stdlib only, forward slashes, descriptive filenames, every threshold documented with its
+reasoning and written as a function of n where the statistics require it, no time-sensitive statements.
