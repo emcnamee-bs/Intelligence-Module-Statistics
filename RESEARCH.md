@@ -1149,3 +1149,69 @@ Traced end to end: **~4,600 tokens favorable, ~8,000 realistic** — the same or
 precedent cited as the thing to avoid, not "near-zero." Structurally, SKILL.md is the largest line
 item and is charged *before* the gate runs: the gate cannot save the tokens spent by the document
 telling it to run the gate.
+
+### 3.10 Two blocking library gaps the spec never named
+
+**Source:** review 05.
+
+- **`lib/seq.py` — supermartingale primitives — is absent from the spec entirely**, despite §12
+  mandating that Wave 1 *lead* with the anytime-valid family. The spec commits to building the thing
+  first and never lists what it is built on.
+- **`lib/series.py` — an exchangeability / autocorrelation gate — is needed by 8 models and
+  underwrites P1.** P1 says exactness comes from enumeration *under exchangeability*; nothing in the
+  spec checks whether exchangeability holds. Note the tension with P2: this gate must report a
+  breakdown value (P4), not a pass/fail test, or it recreates the exact failure P2 identifies.
+
+Smaller but real: `special.py` never declares an **inverse** incomplete beta, which 5 models need;
+there is no seeded-Monte-Carlo or MC-error contract; no robust-scale ladder for the MAD = 0 case
+(§1.29); no censored-survival primitives despite T09; and no shared provenance-flag contract backing
+the registry's own `independence_required` / `data_provenance_required` fields.
+
+### 3.11 Six further identity clusters — the count is now ~18
+
+Review 05 surfaced six more beyond §2.2's three and §3.4's nine. **The dedup pass must re-run before
+any Wave 1 code**, and the running total across three independent passes is roughly eighteen clusters
+inside 310 ranked models.
+
+Three independent reviewers each finding more duplication than the last is itself the finding: the
+catalogue is mostly a small number of mathematical objects wearing many names. This is now decisive
+for the build shape (§3.4) rather than merely suggestive.
+
+### 3.12 The Wave 0 pilot set fails its own stated purpose
+
+**Source:** review 05. The four pilots were chosen to exercise every input tier and every output mode.
+They do not:
+
+- **`ROBUSTNESS` — the newest and riskiest mode — is exercised by none of them.**
+- **`MUST-CONSTRUCT-DATA` is only a side channel** of a DATAFILE model, not a first-class path.
+- The spec **contradicts itself** on `zero_events_observed_upper_bound` at n = 0: §7's `refuses_when`
+  says REFUSED, §12's pilot description says `NO ANSWER EXISTS`. So a third mode may also be
+  uncovered, and the ambiguity is in a field the router reads.
+- No pilot carries a `composition_hazards` or provenance value, so three of the five new registry
+  fields ship untested.
+- **The registry example in §7 is itself wrong**: it sets `independence_required: false` on the model
+  whose dominant real-world violation is non-exchangeable reruns.
+
+Recommendation adopted: keep the four, add the E-value as a fifth (the only clean `ROBUSTNESS`
+producer in the catalogue), give `benchmark_regression` a data-less `--plan` mode so
+MUST-CONSTRUCT-DATA is a real path, and settle the two mode assignments before Wave 0 starts.
+
+### 3.13 Wave 1 candidate ordering
+
+Review 05's top ten by build priority, retained as input to the consolidated plan (subject to the
+re-run dedup pass, which will collapse several into shared engines):
+
+1. `minimum_attainable_p_for_design` — P3 made executable; a precondition for every signal-vs-noise model
+2. `anytime_valid_confidence_sequence` — the mandated lead; builds the C5 engine three models need
+3. `multiplicity_correction_for_search` — "the biggest agent self-deception"; zero lib dependencies
+4. `unmeasured_confounding_breakdown_value` — the only clean `ROBUSTNESS` producer found
+5. `success_rate_from_few_trials` — the modal INLINE question; first real exercise of `special.py`
+6. `pool_probabilities_with_dependence_discount` — P6; the highest-leverage guard in the sweep
+7. `pool_evidence_from_adaptive_collection` — closes the adaptive-collection → pooling hazard
+8. `quantile_confidence_from_order_statistics` — C1 sibling; "your p99 from 100 samples isn't a statistic"
+9. `uncertainty_propagation_through_product` — `f^√k`, not `f^k`
+10. `bayes_action_under_stated_loss` — refuses without a declared loss; emits the decision-flip threshold
+
+Note that (1) and (3) require **no statistics the baselines got wrong** — they encode facts an agent
+has no way to know it doesn't know. That matches the baseline evidence (`evals/baselines/RESULTS.md`)
+better than most of the catalogue does.
