@@ -199,7 +199,7 @@ change the design**; per-model detail stays in the territory files.
 | 01 | Bayesian inference & decision theory | pending | — |
 | 02 | Causal inference | ✅ `02-causal-inference.md` | 24 + 15 cut |
 | 03 | Forecasting & time series | pending | — |
-| 04 | Robust & nonparametric | pending | — |
+| 04 | Robust & nonparametric | ✅ `04-robust-nonparametric.md` | 26 + 30 cut |
 | 05 | Extreme value & tail risk | ✅ `05-extreme-value-tail-risk.md` | 24 + 20 cut |
 | 06 | Sequential design & stopping | ✅ `06-sequential-design-stopping.md` | 25 + 15 cut |
 | 07 | Calibration & forecast scoring | ✅ `07-calibration-forecast-scoring.md` | 23 + 22 cut |
@@ -643,3 +643,97 @@ verification against primary sources is a required step before any affected mode
 folded into the Wave 1 definition of done rather than left implicit.
 
 Compounding factor from §1.16: these reports are not independent evidence of each other.
+
+### 1.27 CORRECTION to §1.12: permutation is exact, the bootstrap is not
+
+Territory 04 measured what §1.12 assumed. §1.12 concluded that "exactness by resampling" should be
+the library's default idiom and grouped permutation and bootstrap together as interchangeable
+small-sample workhorses. **That conflation was wrong, and the error matters.**
+
+Measured coverage of a nominal 95% CI for a lognormal mean at **n = 6** (pure-stdlib harness, run by
+the territory agent rather than estimated):
+
+| Method | Actual coverage |
+|---|---|
+| Bootstrap percentile | **0.731** |
+| Bootstrap BCa | **0.753** |
+| Bootstrap-t | 0.889 |
+
+The two flavours an agent reaches for first are the two that fail hardest, and bootstrap-t only
+closes the gap by producing an interval roughly 4× wider. Worse, the **bootstrap of a median at odd n
+is degenerate**: at n = 5, 7, 9 it takes exactly 5, 7, 9 distinct values across 20,000 resamples, so
+any quantile computed from it is meaningless — it looks like a distribution and is not one.
+
+The distinction §1.12 missed: **permutation tests are exact** because they enumerate a null that is
+true by construction under exchangeability. **The bootstrap is an asymptotic approximation** that
+happens to be implemented by resampling. They share a mechanism and not a guarantee.
+
+**Corrected position:** exactness comes from *enumeration under exchangeability* (permutation,
+Mann–Whitney, signed-rank, order statistics, `math.comb` combinatorics) — not from resampling as
+such. The bootstrap is a Wave 2 tool with loud small-n refusals, not a Wave 0 core primitive.
+
+**Action:** revise spec §9 and Wave 0. `lib/resample.py` splits into `lib/exact.py` (permutation
+enumeration, rank-statistic null distributions by dynamic programming, order-statistic intervals) for
+the core, and a separate bootstrap module that refuses below a measured n floor. §1.12's headline —
+that the numerics core is smaller than specced — survives; its stated reason was partly wrong.
+
+This is also a live demonstration of §1.16: §1.12 was a convergent conclusion across four territories
+and was still wrong in a detail none of them checked. Measurement beat convergence.
+
+### 1.28 Design implication: do not route on assumption tests
+
+**Source:** territory 04, and the strongest anti-recommendation in the sweep.
+
+At n < 15, Shapiro–Wilk has near-zero power. Non-rejection is therefore **uninformative** — but an
+agent reads "p = 0.6" as normality confirmed and proceeds to a t-test. The test manufactures false
+license precisely where the agent most needs restraint.
+
+This is the same structure as Roth's pre-trend result in §1.1 — screening on a low-power assumption
+test is worse than not testing — now confirmed in a second, unrelated territory. It has become a
+general principle rather than a quirk of difference-in-differences.
+
+**Corrected routing doctrine:** route on **robustness-first defaults**, never on an assumption test.
+Cost under normality is ~4.5% asymptotic relative efficiency. Benefit when the assumption fails is
+unbounded. That trade is not close.
+
+**Action:** no model in this library may branch on the result of a normality or assumption test, and
+`route.py` must never ask one. Where an assumption genuinely matters, report a breakdown value
+(§1.1), not a test.
+
+### 1.29 Hard arithmetic floors to hardcode as refusals
+
+**Source:** territory 04. These are not conventions or thresholds — they are facts about what the
+design can express, and every one is a refusal the library should ship.
+
+| Situation | Floor |
+|---|---|
+| Two-sided p < 0.05, two-sample | Unreachable at n₁ = n₂ = 3 (min p = 0.10) |
+| Two-sided p < 0.05, paired | Unreachable at n ≤ 5 (min p = 0.0625) |
+| 95% distribution-free median CI | First exists at **n = 6** |
+| Split conformal, 95% | Needs **n ≥ 19** |
+| `[min, max]` as a prediction interval | Covers only (n−1)/(n+1) = **71% at n = 6**; needs n = 39 for 95% |
+| Two-sided 95/95 Wilks tolerance interval | Needs **n = 93** |
+| Robust z-score via MAD | MAD hits **exactly 0** on ordinary discrete data such as `[10,10,10,11,10,40]`, killing every downstream calculation |
+| Heavy-tail detection via kurtosis | Sample kurtosis is bounded above by ≈ n−1, so at n = 10 a Cauchy sample **cannot** look heavier-tailed than a normal one (measured maxima 8.11 vs 6.57, fully overlapping). Use `max|x| / Σ|x|` instead — separates cleanly (0.409 vs 0.234), one line |
+
+The kurtosis result is another §1.2 `naive_answer_is_wrong` entry: the standard diagnostic is not
+merely weak at small n, it is arithmetically incapable of detecting the thing it is used to detect.
+
+### 1.30 Feasibility is now measured, not assumed
+
+Territory 04 ran pure-stdlib timing harnesses rather than estimating. **Nothing in the territory is
+computationally hard:**
+
+- Exact permutation enumeration, C(24,12) = 2.7M: **0.51 s**
+- Exact Mann–Whitney null via DP, 30 v 30: **0.027 s**
+- Exact signed-rank null, n = 100: **0.010 s**
+- Theil–Sen, n = 2000: **0.33 s**
+- Boschloo's nuisance-parameter grid: **0.010 s**
+
+This is the standard the rest of the sweep should be held to, and it retires the concern that pure
+Python would force approximations. At agent scale it does not.
+
+**New candidate flagged:** **HulC** (Kuchibhotla et al., JRSS-B 2024) — builds a confidence interval
+from ~6 subsample estimates with **no variance estimate at all**, and is valid in settings where the
+bootstrap provably is not. Given §1.27, this is the strongest new entrant in the sweep and a direct
+replacement for the role the bootstrap was going to play.
