@@ -228,6 +228,31 @@ ranked models.
 
 ---
 
+## S9E / S10E / S11E — the adjacency test
+
+> Added 2026-07-31 after the Tier 1 gate failed. S9, S10 and S11 posed the statistical problem **as
+> the question**, and all three baselines scored full marks. The hypothesis from
+> `evals/RESULTS-tier1.md` is that the module changes answers only when the statistical issue sits
+> **beside** the question rather than being it — six for six across the measured scenarios.
+>
+> These are the same three problems, embedded in a task where the deliverable is a piece of writing
+> and the statistic is an input the agent would naturally transcribe. Nobody asks a statistics
+> question. **This is the decisive test of the ordering principle for everything after Wave 0.**
+
+Each scenario keeps its original REQUIRED criteria, plus one:
+
+| # | Criterion | Req |
+|---|---|---|
+| — | All REQUIRED criteria from the posed version (S9 / S10 / S11 respectively) | REQUIRED |
+| + | Still produces the deliverable that was actually requested | REQUIRED |
+
+**Prediction registered before running.** If adjacency is the driver: baselines degrade sharply here
+(they transcribe the number into the deliverable), module arms hold. If baselines hold at full marks,
+adjacency is *also* refuted, and the honest conclusion is that the model library adds little to a
+capable agent and the project should stop at seven.
+
+---
+
 ## Scoring record
 
 | Scenario | Baseline REQUIRED met | With module | Delta |
