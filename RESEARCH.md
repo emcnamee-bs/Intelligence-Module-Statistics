@@ -205,7 +205,7 @@ change the design**; per-model detail stays in the territory files.
 | 07 | Calibration & forecast scoring | ✅ `07-calibration-forecast-scoring.md` | 23 + 22 cut |
 | 08 | Evidence synthesis & aggregation | ✅ `08-evidence-synthesis-aggregation.md` | 23 + 20 cut |
 | 09 | Reliability, survival & duration | ✅ `09-reliability-survival-duration.md` | 23 + 22 cut |
-| 10 | Decision, bandits & value of information | pending | — |
+| 10 | Decision, bandits & value of information | ✅ `10-decision-bandits-voi.md` | 25 + 19 cut |
 | 11 | Elicitation & subjective estimation | ✅ `11-elicitation-subjective-estimation.md` | 22 + 14 cut |
 | 12 | Model selection & information theory | ✅ `12-model-selection-information-theory.md` | 22 + 20 cut |
 | 13 | Monitoring, anomaly & changepoint | pending | — |
@@ -556,3 +556,90 @@ therefore **free** — no distribution sampling to implement. Combined with §1.
   spreads (paywalled) and the UK DfT per-sector optimism-bias uplift table. **Neither may enter a
   shipped datafile as-is.** Any lookup table the module ships must have a verified primary source,
   since an agent will treat a shipped number as authoritative.
+
+### 1.21 Design implication: Tier 0 becomes computable
+
+**Source:** territory 10. The most consequential finding for the skill's architecture.
+
+The gating doctrine (spec §5) currently asks the agent to judge whether statistics is warranted —
+"is the decision reversible", "would a number change the action". Those are heuristics an
+overconfident agent can talk itself past in either direction.
+
+**Value-of-information theory makes the gate arithmetic.** Compute the decision threshold first, then
+check reachability: for many proposed measurements the Expected Value of Sample Information is
+**exactly zero at any accuracy** — no amount of data can move the decision — and this is *provable in
+about three lines*. Territory 10 ranks this as the highest-yield refusal in its territory.
+
+This reframes Tier 0 entirely. Instead of "use judgment about whether to use judgment", the skill can
+say: run the EVPI check. If EVPI is zero or below the cost of measuring, stop — and you now have a
+number justifying stopping rather than a vibe.
+
+**Action:** promote an EVPI/EVSI reachability check to the **first tool the skill reaches for**, ahead
+of any model selection. It is simultaneously the Tier 0 gate, the Tier 3 escalation trigger ("is
+constructing this dataset worth it?"), and a model in its own right. Spec §5 to be rewritten around
+it.
+
+This also supplies the honest answer to the +87%-token cost concern in §0.3: the module's first act
+is to check whether it should act at all, and that check is cheap.
+
+### 1.22 Second consolidation cluster confirmed
+
+Territory 10 reports that five of its rows (closed-form EVSI/ENBS via the unit normal loss integral,
+exact Beta-Binomial EVSI by enumeration, Weitzman reservation values, and two others) are **the same
+condition under different information models**: *marginal EVSI = marginal cost*. Recommends building
+one engine, not five models.
+
+This is the second such cluster, after §1.15's `n ≥ ln(α)/ln(p)` identity spanning the rule of three,
+Wilks tolerance intervals, quantile upper bounds, and zero-failure MTBF.
+
+Two clusters found in nine territories suggests the eventual registry has substantially fewer
+*implementations* than *entries* — which is the right shape. One tested implementation, many registry
+entries with family-specific `situations` phrasing routing into it. Confirms the dedup pass as a
+required step before any code is written, and reduces the true build cost of Wave 1.
+
+### 1.23 Design implication: asymptotic guarantees are mostly vacuous at agent scale
+
+**Source:** territory 10, corroborating §1.13. At agent scale — tens to hundreds of trials, 2 to 20
+options — the log-*n* asymptotics behind UCB and Thompson sampling **never bite**. The famous regret
+bound is routinely worse than the trivial bound, so any tool reporting it must print
+`min(UCB bound, n·Δ_max)` or it is quoting a guarantee that is arithmetically vacuous.
+
+Further, the agent usually wants **one committed answer**, not maximized cumulative reward across a
+long horizon. That makes **best-arm identification** the correct frame and regret-minimizing bandits a
+supporting subcase — an inversion of how the literature is usually presented.
+
+### 1.24 A widely-repeated piece of folklore is wrong
+
+**Source:** territory 10. "Use half-Kelly to protect against estimation error" is wrong *as stated*.
+
+Log-growth `Σ pᵢ log(1 + rᵢ f)` is **affine in p**, so parameter uncertainty in the outcome
+*probabilities* does not change the optimal fraction at all — plug in the posterior mean. Simulation
+confirms: σ = 20% on p moves f\* only from 0.40 to 0.36.
+
+Fractional Kelly is really a CRRA risk-aversion statement (γ ≈ 1/λ), not an estimation-error hedge.
+The actual defence against bad estimates is **shrinking p̄**, not scaling f.
+
+Worth shipping precisely because it is a case where the agent's likely prior belief is confidently
+wrong — the §1.2 `naive_answer_is_wrong` category.
+
+### 1.25 An honest capability boundary
+
+**Source:** territory 10. Single-parameter EVPPI is feasible in stdlib (sorted-window conditional
+expectation). **Multi-parameter EVPPI needs GAMs or Gaussian processes and is out of reach.**
+
+The correct behaviour is for the tool to *say so* rather than silently approximate. This is the first
+clean instance of a boundary the module should advertise rather than paper over, and it belongs in
+the `NO ANSWER EXISTS` output mode (§1.14) with a note on what would be needed.
+
+### 1.26 Systemic research-quality caveat
+
+Three territories (08, 10, 11) exhausted a 200-call web-search session budget, and territory 10 hit
+its cap after only 8 searches, completing largely via direct source fetches and explicit derivation.
+
+Consequence: **citation density is uneven across the sweep, and some findings rest on domain knowledge
+rather than fresh verification.** Every territory report flags its own unverified constants. These are
+not blocking — the mathematics in the affected rows was derived explicitly rather than recalled — but
+verification against primary sources is a required step before any affected model ships, and is
+folded into the Wave 1 definition of done rather than left implicit.
+
+Compounding factor from §1.16: these reports are not independent evidence of each other.
